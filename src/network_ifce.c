@@ -27,7 +27,7 @@ struct datamsg {
 
 
 struct datareq {
-	int reqsource;
+	int orig;
 	int serial;
 	void * addr;
 }
@@ -36,7 +36,7 @@ struct datareq {
 
 #define RWREQ_TYPE 21
 struct rwreq {
-	int reqsource;
+	int orig;
 	void * addr;
 }
 
@@ -77,6 +77,7 @@ struct invalidate_ack {
 #define RWRITE_TYPE 111
 struct rwrite {
 	// Contains the data.
+    int orig;
 	int serial;
 	struct object_desc object_desc;
 	// Followed by data.
@@ -117,7 +118,9 @@ struct stolen {
 
 // Sending is asynchronous.
 extern int send ( int sender, int receiver, int type, void * data, size_t data_size );
-
+extern void data_arrived( void  * page );
+extern void w_arrived( void  * page );
+extern void resp_arrived( void * page );
 
 // For receiving, conform to one of those.
 typedef int (*handler_sig)(int src,
@@ -196,22 +199,29 @@ int rwreq_handler( int src, int dest, int type, void * data, size_t data_size ) 
 	struct rwreq * rwreq = (struct rwreq *) data;
 	struct owm_frame_layout * fheader  = rwreq->addr - sizeof( struct owm_frame_layout );
 
-	// If zone is given to s/o else already : foward message.
-	if ( ! IS_RESPONSIBLE( fheader ) ) {
+    // If owner, but not resp, forward message.
 
-	}
-	// If zone is used currently : reply with transient writer proposition.
+    // Check for availability :
+    if ( is_available( rwreq->addr )) {
+        transfer_resp( rwreq->orig );
+    } else {
+        // Send go transitive message to orig.
+        struct gotransitive msg;
+        msg.addr = rwreq.addr;
+        send( get_node_num(), rwreq.orig, GOTRANSITIVE_TYPE, &msg, sizeof( struct gotransitive));
+    }
 
 }
 
 
 int rwrite_ack_handler( int src, int dest, int type, void * data, size_t data_size ) {
-	// Checks transient state : if on, abort.
-	// Copies the data in place.
-	// Marks page as resp
+    struct rwrite_ack * rwrite_ack = (struct rwrite_ack *)data;
 
-	// Send a message to owner ( if not owner)
-	// Triggers all callbacks : data arrived as well as resp arrived.
+	struct owm_frame_layout * fheader  = rwrite_ack->addr - sizeof( struct owm_frame_layout );
+
+    signal_write_commited( fheader->addr );
+
+
 }
 
 
@@ -231,18 +241,11 @@ int invalidatecache_handler( int src, int dest, int type, void * data, size_t da
 
 
 int gotransitive_handler( int src, int dest, int type, void * data, size_t data_size ) {
-	// Unpack address
+    GET_FHDR(gotransitive,fheader);
 
-	// Set transitive.
-
-	// Trigger signal.
+	SET_TRANSITIVE( fheader );
+	signal_write_arrived( fheader->data );
 }
 
-
-void tdec() {
-	on( TDEC_TIME ) ( {
-		send_tdec( addr );
-	} );
-}
 
 
