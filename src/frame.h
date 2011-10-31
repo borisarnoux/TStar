@@ -2,10 +2,22 @@
 #define FRAME_H
 
 
-#define INVALIDATE( fheader ) TODO // Define that
 
 
-void signal_page_arrival( int pagevt_dir, void * page );
+#define VALID 10
+#define INVALID 11
+#define TRANSIENT 12
+#define RESP 13
+
+#define  PROTO_TO_STATE( __fheader, newstate ) do { __fheader->proto_status = newstate; __sync_synchronize(); } while (0)
+#define  INVALIDATE( fh ) PROTO_TO_STATE( (fh), INVALID )
+#define  TRANSIENTIZE( fh ) PROTO_TO_STATE( (fh), TRANSIENT )
+#define  RESPONSIBILIZE( fh ) PROTO_TO_STATE( (fh), RESP )
+#define  VALIDATE( fh ) PROTO_TO_STATE( (fh), VALID )
+
+#define IS_VALID_OR_RESP( fh ) ((fh)->proto_status == VALID || (fh)->proto_status == RESP )
+#define IS_RESP( fh ) ((fh)->proto_status == RESP )
+
 
 
 struct owm_frame_layout {
@@ -18,8 +30,16 @@ struct owm_frame_layout {
 }
 
 
+
+
+
 void * owm_malloc( size_t size ) {
 	// Allocates in private segment for data + header.
+
+}
+
+
+void own_free( size_t size ) {
 
 }
 
