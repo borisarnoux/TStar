@@ -132,7 +132,6 @@ typedef int (*handler_sig)(int src,
 // And register.
 extern void register_handler( int type, handler_sig h );
 
-#define HANDLER( type, func ) 
 
 int datareq_handler( int src, int dest, int type, void * data, size_t data_size ) {
 	// Here the datareq is handled
@@ -156,6 +155,9 @@ int datareq_handler( int src, int dest, int type, void * data, size_t data_size 
 		      buffer, sizeof( struct datamsg ) + fheader->size );
 	} else {
 		// Forward it to the next known responsible.
+		if ( fheader->initialized  == false ) {
+		  fheader->nextresp = PAGE_OWNER( fheader );
+		}
 		send( get_node_num(), fheader->nextresp, type, data, data_size );
 	}
 }
