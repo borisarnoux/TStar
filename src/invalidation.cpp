@@ -123,5 +123,7 @@ void planify_invalidation ( serial_t serial, void * page, node_id_t client ) {
         send_invalidate_ack( client, serial, page );
       } );    
   // And we register it into the invalidate_ack map :
-  register_forinvalidateack( serial, page, continuer );
+  for ( int i = 0; i < total_to_wait; ++i ) {
+    register_forinvalidateack( serial, page, continuer );
+  }
 }

@@ -132,6 +132,7 @@ typedef int (*handler_sig)(int src,
 // And register.
 extern void register_handler( int type, handler_sig h );
 
+#define HANDLER( type, func ) 
 
 int datareq_handler( int src, int dest, int type, void * data, size_t data_size ) {
 	// Here the datareq is handled
@@ -142,7 +143,7 @@ int datareq_handler( int src, int dest, int type, void * data, size_t data_size 
 	// If the address corresponds to a local responsible, send the copy.
 	// Otherwise, forward it to the next responsible ( see owm header ).
 
-	if ( IAM_RESP( fheader ) ) {
+	if ( IS_RESP( fheader ) ) {
 		// Prepare a packet for the data.
 		// TODO : avoid copies here.
 		struct datamsg * buffer = malloc( sizeof( struct datamsg ) + fheader->size );
@@ -187,7 +188,7 @@ int datamsg_handler( int src, int dest, int type, void * data, size_t data_size 
 	}
 
 	// Then call the data arrived callback ( TODO )
-
+  
 
 
 
@@ -199,12 +200,16 @@ int rwreq_handler( int src, int dest, int type, void * data, size_t data_size ) 
 	struct rwreq * rwreq = (struct rwreq *) data;
 	struct owm_frame_layout * fheader  = rwreq->addr - sizeof( struct owm_frame_layout );
 
-    // If owner, but not resp, forward message.
+  // If owner, but not resp, forward message.
+  if ( IS_OWNER( fheader ) && ! IS_RESP( fheader ) ) {
+    send( get_node_num(), fheader->nextresp, type, data, data_size );
+  }
 
-    // Check for availability :
-    if ( is_available( rwreq->addr )) {
-        transfer_resp( rwreq->orig );
-    } else {
+
+  // Check for availability :
+  if ( is_available( rwreq->addr )) {
+        do_transfer_resp( rwreq->orig );
+  } else {
         // Send go transitive message to orig.
         struct gotransitive msg;
         msg.addr = rwreq.addr;
@@ -225,7 +230,7 @@ int rwrite_ack_handler( int src, int dest, int type, void * data, size_t data_si
 }
 
 
-int invalidatecache_handler( int src, int dest, int type, void * data, size_t data_size ) {
+int invalidate_cache_handler( int src, int dest, int type, void * data, size_t data_size ) {
 	// Unpacks header address.
 	struct invalidatecache * invalidatecache = (struct invalidatecache * ) data;
 	struct owm_frame_layout * fheader  = invalidatecache->addr - sizeof( struct owm_frame_layout );
@@ -240,12 +245,14 @@ int invalidatecache_handler( int src, int dest, int type, void * data, size_t da
 }
 
 
-int gotransitive_handler( int src, int dest, int type, void * data, size_t data_size ) {
-    GET_FHDR(gotransitive,fheader);
+
+int go_transitive_handler( int src, int dest, int type, void * data, size_t data_size ) {
+  GET_FHDR(gotransitive,fheader);
 
 	SET_TRANSITIVE( fheader );
 	signal_write_arrived( fheader->data );
 }
+
 
 
 
