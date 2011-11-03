@@ -105,7 +105,8 @@ public :
   // This method returns an array of stolen tasks.
   // buffer is an output buffer, supposed big enough.
   int steal_tasks( struct frame_struct * buffer, int amount ) {
-  
+	delegate_only();
+
 	for ( int i = 0; i < amount; ++ i ) {
 	  if ( external_tasks.empty() ) {
 		// Only i tasks were stolen.
@@ -120,6 +121,8 @@ public :
   }
 
   int get_refund( int amount ) {
+	delegate_only();
+
 	for ( int i = 0; i < amount; ++ i ) {
 	  if ( external_tasks.empty() ) {
 		return i;
