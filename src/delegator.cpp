@@ -2,8 +2,9 @@
 #include <omp.h>
 #include <list>
 
+#include <misc.h>
+#include <frame.h>
 
-extern int delegator_flag;
 
 __thread int delegator_flag = 0;
 
@@ -21,8 +22,8 @@ public :
 template<typename T> 
 Callable * new_Closure( int _sc, T * _lambda ) {
   struct Closure : Callable {
-	int sc;
 	T* lambda;
+	int sc;
 
 	Closure( T * _lambda ) :
 		lambda(_lambda ), sc(1) {}

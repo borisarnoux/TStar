@@ -35,7 +35,7 @@ struct owm_frame_layout {
 	int pagevt_dir;
 
 	char data[];
-}
+};
 
 
 
@@ -43,12 +43,11 @@ struct owm_frame_layout {
 
 void * owm_malloc( size_t size ) {
 	// Allocates in private segment for data + header.
-
+	return NULL;
 }
 
 
 void own_free( size_t size ) {
-
 }
 
 #endif
