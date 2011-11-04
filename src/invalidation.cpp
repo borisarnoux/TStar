@@ -29,8 +29,8 @@ void register_copy_distribution( void * page, node_id_t nodeid ) {
 }
 
 
-long long shared_set_to_bitmap( void * page ) {
-  RespSharedMapRange r = RespSharedMap.equal_range(page);
+long long export_and_clear_shared_set( void * page ) {
+  RespSharedMapRange r = resp_shared_map.equal_range(page);
 
   long long retval = 0;
   
@@ -40,47 +40,22 @@ long long shared_set_to_bitmap( void * page ) {
 
   }
 
+  resp_shared_map.erase( r );
   return retval;
-
 }
 
 void shared_set_load_bit_map( void * page,long long bitmap ) {
   ASSERT( sizeof(bitmap) == 64);
   for ( int i = 0; i < 64; ++ i ) {
-    if ( bitmap & 1<<i ) {
-      RespSharedMap.emplace( page, i );
+    if ( (bitmap & 1<<i)
+     &&  i!=get_node_num() ) { // We don't want to add ourselves to the map.
+	  RespSharedMap.emplace( page, i );
     }
 
   }
 }
 
 
-TaskMapper invalidateack_tm;
-
-
-// This is essentially what happens when an invalidation
-// ack arrives. This triggers a tdec onto a so called local task
-// This local task will eventually fire (one shot only), and 
-// can : 
-//   * In the case of a resp collecting acks from its invalidation :
-//      -> propagate to the node demanding the invalidation in the first place.
-//        ( once all invalidations are done )
-//   * In the case of a non resp having called the resp to do the invalidation :
-//      -> will likely trigger an actual do_tdec (local or remote)
-
-
-void signal_invalidateack( int serial, void * page ) {
-  
-  // Use the task mapper :
-
-  struct invalidation_id invid;
-  invid.serial = serial;
-  invid.page   = page;
-
-
-  invalidateack_tm.activate( invid );
-
-}
 
 void register_forinvalidateack( serial_t serial, void * page, LocalTask * c ) {
 
