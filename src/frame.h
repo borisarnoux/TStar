@@ -15,9 +15,17 @@
 #define  RESPONSIBILIZE( fh ) PROTO_TO_STATE( (fh), RESP )
 #define  VALIDATE( fh ) PROTO_TO_STATE( (fh), VALID )
 
+
+#define IS_AVAILABLE_( fh ) IS_VALID_OR_RESP(fh)
 #define IS_VALID_OR_RESP( fh ) ((fh)->proto_status == VALID || (fh)->proto_status == RESP )
 #define IS_RESP( fh ) ((fh)->proto_status == RESP )
 
+#define PAGE_IS_AVAILABLE( page ) IS_AVAILABLE( GET_FHEADER( page ) )
+#define PAGE_IS_VALID( page ) IS_VALID( GET_FHEADER(page) )
+#define PAGE_IS_RESP( page ) IS_RESP( GET_FHEADER(page) )
+
+
+#define GET_FHEADER( page ) ((struct owm_frame_layout*)((intptr_t)page - sizeof(struct owm_frame_layout)))
 
 
 struct owm_frame_layout {
