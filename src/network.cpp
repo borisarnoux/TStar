@@ -42,7 +42,24 @@ struct DataReqMessage{
   void * page;
 }
 
+struct RWrite {
+  int orig;
+  void * page;
+  size_t offset;
+  size_t size;
+  char data[];
+}
 
+struct RWReq {
+  int orig;
+  void * page;
+}
+
+struct RespTransfer {
+  void *page;
+  long long shared_nodes_bitmap;
+  DataMessage datamsg;
+}
 
 class NetworkHandlers {
 
@@ -84,6 +101,8 @@ class NetworkHandlers {
     // Finally copy :
     memcpy( drm.page, drm.data, drm.size );
 
+    // Signal data arrived :
+    signal_data_arrived( drm.page );
   }
   
   void onDataReqMessage( MessageHdr &m ) {
@@ -114,10 +133,22 @@ class NetworkHandlers {
 
     send( resphdr );
 
+    // Then add the recipient to the shared list of nodes :
+    // see invalidation.cpp
+    register_copy_distribution( drm.page, drm.orig );
+
   }
 
+  void onRwriteMessage( MessageHdr &m ) {
+    // Check state or forward :
+    
+  }
+
+  void onRwriteAckMessage( MessageHdr &m ) {
+
+  }
   void onRWReqMessage( MessageHdr &m ) {
-  
+    
   }
 
   void onRespTransfer( MessageHdr &m ) {

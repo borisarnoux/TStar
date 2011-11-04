@@ -29,7 +29,30 @@ void register_copy_distribution( void * page, node_id_t nodeid ) {
 }
 
 
+long long shared_set_to_bitmap( void * page ) {
+  RespSharedMapRange r = RespSharedMap.equal_range(page);
 
+  long long retval = 0;
+  
+  for ( auto i = r.first; i != r.second; ++ i ) {
+   
+    retval |= 1<<(i->second);
+
+  }
+
+  return retval;
+
+}
+
+void shared_set_load_bit_map( void * page,long long bitmap ) {
+  ASSERT( sizeof(bitmap) == 64);
+  for ( int i = 0; i < 64; ++ i ) {
+    if ( bitmap & 1<<i ) {
+      RespSharedMap.emplace( page, i );
+    }
+
+  }
+}
 
 
 TaskMapper invalidateack_tm;
