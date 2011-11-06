@@ -31,19 +31,29 @@
 struct owm_frame_layout {
 	size_t data_size; // Size of
 	int proto_status; // Fresh, Invalid, TransientWriter, Responsible.
-	int version; // In case of Invalid, version number of the last request.
+	int version;      // In case of Invalid, version number of the last request.
 	int pagevt_dir;
 
 	char data[];
 };
 
 
+struct frame_struct {
+  struct static_data * static_data;
+  long sc;
+  long args[];
+}
+
+struct static_data {
+  void (*fn)();
+  int sc;
+  long arg_types[];
+}
 
 
-
-void * owm_malloc( size_t size ) {
+inline void * owm_malloc( size_t size ) {
 	// Allocates in private segment for data + header.
-	return NULL;
+	return ;
 }
 
 

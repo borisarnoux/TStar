@@ -49,7 +49,7 @@ void shared_set_load_bit_map( void * page,long long bitmap ) {
   for ( int i = 0; i < 64; ++ i ) {
     if ( (bitmap & 1<<i)
      &&  i!=get_node_num() ) { // We don't want to add ourselves to the map.
-	  RespSharedMap.emplace( page, i );
+	    RespSharedMap.emplace( page, i );
     }
 
   }
@@ -57,13 +57,13 @@ void shared_set_load_bit_map( void * page,long long bitmap ) {
 
 
 
-void register_forinvalidateack( serial_t serial, void * page, LocalTask * c ) {
+void register_forinvalidateack( serial_t serial, void * page, Closure * c ) {
 
   struct invalidation_id invid;
   invid.serial = serial;
   invid.page   = page;
 
-  invalidateack_tm.register(  invid, c );
+  invalidateack_tm.register_evt(  invid, c );
 }
 
 
@@ -74,25 +74,14 @@ void register_forinvalidateack( serial_t serial, void * page, LocalTask * c ) {
 // to answer to is local it doesn't send anything but does what the
 // arrival of the message would have done.
 //  TODO : think about how not to write too much code here.
-void send_invalidate_ack( node_id_t target, serial_t serial, PageType page ) {
-    if ( target == get_node_num() ) {
-      // Just trigger the invalidation as done locally.
-      
-    }
-
-    // TODO : Or actually send the message.
-    
-}
 
 void planify_invalidation ( serial_t serial, void * page, node_id_t client ) {
-  // If the Resp is local :
-  // if shared == {}
-  //    then trigger signal_invalidateack and exit.
-  // else 
-  //    choose a serial for doinvalidates
-  //    send do_invalidate to all members of shared.
-  //    register all of them into the multimap. ( double entries )
- 
+  
+  // Check if page is RESP mode :
+  //
+  CFATAL ( ! PAGE_IS_RESP( page ) );
+  
+  
   RespSharedMapRange range = resp_shared_map.equal_range(page);
 
 
@@ -108,7 +97,7 @@ void planify_invalidation ( serial_t serial, void * page, node_id_t client ) {
     send_do_invalidate( target, serial, page );
   }
 
-  // Interesting special case :
+  // We can avoid setting up :
   if ( total_to_wait == 0 ) {
     send_invalidate_ack( client, serial, page );
     // Here we finish immediately.
@@ -116,7 +105,7 @@ void planify_invalidation ( serial_t serial, void * page, node_id_t client ) {
   }
 
   // Then we add a closure which will respond to the client :
-  auto continuer = new_ClosureLocalTask( total_to_wait,
+  auto continuer = new_Closure( total_to_wait,
       {
         send_invalidate_ack( client, serial, page );
       } );    

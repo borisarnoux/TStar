@@ -4,60 +4,17 @@
 
 #include <hashint.h>
 #include <frame.h>
-
-class LocalTask {
-private :
-  int sc;
-
-public:
-  
-  void tdec() {
-    assert( sc > 0 );
-    sc -= 1;
-    
-    if ( sc == 0 ) {
-      (*this)()
-    }  
-  }
-  
-  virtual void operator()() = 0;
-
-protected :
-  LocalTask( int _sc ) : sc(_sc ) {}
-
-}
+#include <delegator>
 
 
-template<typename T>
-class ClosureLocalTask : LocalTask {
-  T * lambda;
 
-public:
-  ClosureLocalTask( int _sc, T * _lambda )
-  : LocalTask(_sc), lambda(_lambda) {
-    
-  }
 
-  void operator() () {
-    (*lambda)();
-    // Task is one shot.
-    delete this;
-
-  }
-
-  virtual ~ClosureLocalTask() {
-    delete lambda;
-
-  }
-}
-
-#define new_ClosureLocalTask( count, block ) new ClosureLocalTask( count, new auto([=]() block ) )
 
 
 template<typename KeyType>
 class TaskMapper {
 public: 
-   typedef boost::unordered_multimap<KeyType,LocalTask*> MapType;
+   typedef boost::unordered_multimap<KeyType,Closure*> MapType;
    typedef boost::recursive_mutex RecMutex;
    typedef boost::interprocess::scoped_lock ScopedLock;
 
@@ -75,7 +32,7 @@ private:
    }
 
 
-   void register_evt( KeyType k, LocalTask t ) {
+   void register_evt( KeyType k, Closure * t ) {
       int idx = hashzone(&k,sizeof(k));
       ScopedLock scpl( mutexes[ idx ] );
 
@@ -84,7 +41,7 @@ private:
 
    }
 
-   void activate_evt( KeyType k ) {
+   void signal_evt( KeyType k ) {
 
       // TODO : Generic but only works when packed....
       int lock_index = hashzone(&k,sizeof(k));
@@ -97,7 +54,7 @@ private:
       Range all_occurences = maps[idx].equal_range( k );
 
       for ( MapType::iterator i = all_occurences.first();
-            i != all_occurences.second();
+            i != all_occurences.second;
             ++ i ) {
           // Calls Tdec ( auto cleanup )
           i->second()->tdec();

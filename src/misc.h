@@ -53,25 +53,6 @@ extern "C" {
 #define max(a,b) ( (a)>(b)?(a):(b))
 
 
-#define _loc_dbg(x,...) fprintf( stderr, x "\n", ##__VA_ARGS__)
-#define SET_CANARIS(h) do { h->canari1 = 0x42; h->canari2 = 0x43; } while (0)
-#define CHECK_CANARIS(h) do { \
-    if ( h->canari1 != 0x42 || h->canari2 != 0x43 ) {\
-        _loc_dbg( "Canari 1 : %hx", h->canari1);\
-        _loc_dbg( "to_notice : %lx", h->field_nodes_to_notice);\
-        _loc_dbg( "Canari 2 : %hx", h->canari2);\
-        _loc_dbg( "counter : %d", h->counter);\
-        _loc_dbg( "perm : %hx", h->perm);\
-        _loc_dbg( "owners_field : %lx", h->owners_field);\
-        _loc_dbg( "size : %lu", (unsigned long)h->size );\
-        struct frame_struct * z = (struct frame_struct * ) ((intptr_t)h + sizeof(struct page_hdr));\
-        _loc_dbg("Frame infos name : %s", z->infos->misc!= NULL ? z->infos->misc->fname:NULL);\
-        _loc_dbg("Frame sc : %d", z->sc );\
-        _loc_dbg("Frame ret field : %p", z->ret[0]);\
-        FATAL(" Invalid canaries.");\
-    }} while (0)
-
-
 #ifdef __cplusplus
 }
 #endif

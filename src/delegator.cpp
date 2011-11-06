@@ -21,6 +21,10 @@ public :
 
 template<typename T> 
 Callable * new_Closure( int _sc, T * _lambda ) {
+  if ( _sc == 0 ) {
+    FATAL( "FATAL : Closure must be delayed, use call instead." );
+  }
+
   struct Closure : Callable {
 	T* lambda;
 	int sc;
