@@ -1,0 +1,6 @@
+Aspects to check :
+  * Serial collisions in invalidation...
+  * need for serials in general.
+  * correct routing data.
+  * Enforced uniqueness of executing sched↓ler thread.
+

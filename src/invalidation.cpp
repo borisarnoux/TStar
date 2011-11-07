@@ -75,7 +75,47 @@ void register_forinvalidateack( serial_t serial, void * page, Closure * c ) {
 // arrival of the message would have done.
 //  TODO : think about how not to write too much code here.
 
-void planify_invalidation ( serial_t serial, void * page, node_id_t client ) {
+
+void ask_or_do_invalidation_rec_then( serial_t serial, fat_pointer_h p, Closure * c ) {
+  for ( int i = 0; i < p->use_count; ++ i  ) {
+	struct ressource_desc & r = p->elements[i];
+	if ( r.perm == WO_PERM  || r.perm == RW_PERM ) {
+				
+	}
+  }
+
+
+}
+
+void ask_or_do_invalidation_then( serial_t serial, void * page, Closure * c ) {
+  if ( PAGE_IS_RESP( page ) ) {
+	invalidate_and_do
+  
+  } else {
+	
+
+
+  }
+
+  
+}
+
+
+
+void planify_invalidation(serial, page, client ) {
+
+  // Then we add a closure which will respond to the client :
+  auto continuer = new_Closure( 1,
+      {
+        send_invalidate_ack( client, serial, page );
+      } );
+
+  
+  invalidate_and_do( serial, page, continuer );
+}
+
+
+void invalidate_and_do ( serial_t serial, void * page, Closure * c ) {
   
   // Check if page is RESP mode :
   //
@@ -99,18 +139,22 @@ void planify_invalidation ( serial_t serial, void * page, node_id_t client ) {
 
   // We can avoid setting up :
   if ( total_to_wait == 0 ) {
-    send_invalidate_ack( client, serial, page );
-    // Here we finish immediately.
-    return;
+    c->tdec();
   }
 
-  // Then we add a closure which will respond to the client :
-  auto continuer = new_Closure( total_to_wait,
-      {
-        send_invalidate_ack( client, serial, page );
-      } );    
+  // Todo ; optitimize with a tincr...
+
+  Closure * continuer = new_Closure( total_to_wait, 
+	{ 
+	  (*c).tdec();
+	}
+  );
+  
   // And we register it into the invalidate_ack map :
   for ( int i = 0; i < total_to_wait; ++i ) {
     register_forinvalidateack( serial, page, continuer );
   }
+  
+
 }
+

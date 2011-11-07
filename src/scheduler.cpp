@@ -136,27 +136,35 @@ public :
 	return amount;
   }
 
-private:
-  static __thread struct frame_struct * current_cfp;
-
-  struct TDec {
-	 struct frame_struct * target;
-	 void * related;
-  }
 
 
-  static __thread list<TDec> * tdecs_list_p = NULL;
+
 
   
+}
+
+struct TDec {
+	 struct frame_struct * target;
+	 void * related;
+};
+
+struct DWrite {
+	void * object;
+	void * frame;
+	void * pos;
+	size_t len;
+};
+
+class ExecutionUnit {
 
 
-  static void init_tls() {
-	tdecs_list_p = new list<TDec>();
-	
-  }
+  struct frame_struct * current_cfp;
+  // Ressource -> writes.
+  map<PtrType, DWrite> writes_by_ressource;
+  map<PtrType, TDec> tdecs_by_ressource;  
 
 
-  static void executor( struct frame_struct * page ) {
+  void executor( struct frame_struct * page ) {
 	current_cfp = page;
 	if ( ! PAGE_VALID( page ) ) {
 	   FATAL( "Execution of invalid page" );
@@ -169,12 +177,33 @@ private:
 
   }
 
-  static void tdec( struct frame_struct * page, void * ref ) {
+  void tdec( struct frame_struct * page, void * ref ) {
 	struct TDec mytdec = {page,ref};
-	(*tdecs_list_p).push_front(mytdec);
+	tdecs_list.push_front(mytdec);
   }
 
-  static void process_tdecs() {
+
+  void register_write( void * object, void * frame, void * pos, size_t len ) {
+	
+
+  }
+
+  static void process_commits() {
+	// For each registered ressource 
+	for_each( ressource_desc d, current_cfp ) {
+	  // Check type :
+	  // If fat pointer, process : 
+	  //    * Writes per frame, accessed in map by object.
+	  //    * Allocate a closure that triggers invalidation and is registered in rwrite ack map.
+	  //    * Allocation of a buffer for holding relevant tdecs.
+	  //    * After recursive invalidation of complex object, tdecs are executed and the array freed.
+
+	  // If normal frame :
+	  //   * process writes per frame, accessed in map per frame.
+	  //   * Allocate a closure that triggers invalidation and is registered in rwrite ack map.
+	  //   * Allocation of a buffer for all the tdecs to do.
+	  //   * after simple invalidation, do the tdecs and free the buffer.
+	}
 	
   }
 
