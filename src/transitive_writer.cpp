@@ -36,16 +36,14 @@ void signal_data_arrived(PageType page ) {
 
 // To be called onto complex objects only.
 // This local task typically performs a tdec.
-void acquire_rec( complex_obj_t ptr, LocalTask * t ) {
+void acquire_rec( complex_obj_t ptr, Closure * t ) {
   // ptr is a recursive object description pointer.
   
   // The strategy we follow is simple : 
   //   - if available, proceed.
   //   - else : ask for ressources, proceed when available.
-  //
-  //
-  //  A continuation is created
-  if ( IS_VALID_PAGE( ptr ) ) {
+  
+  if ( PAGE_IS_VALID( ptr ) ) {
     // When ressources are available
     // We read the pointers inside.
     // For leaves we pass if fresh/local
@@ -55,9 +53,23 @@ void acquire_rec( complex_obj_t ptr, LocalTask * t ) {
     //
     //
     // For branches, we recurse.
+     
   } else { // ressources need prior acquision.
     // Self schedule on data arrival.
+    
+    auto c = new_Closure( 1, {
+      acquire_rec( ptr, t );
+        });
+
+    serial_t serial = request_data( ptr );
+    register_for_data_arrival( serial, ptr, t );
+
 
   }
+}
+
+void release_rec( complex_obj_t ptr ) {
+  
+
 }
 
