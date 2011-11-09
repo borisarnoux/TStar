@@ -1,10 +1,15 @@
-#include  <boost/unordered_map.hpp>
+#ifndef TASK_MAPPER_H
+#define TASK_MAPPER_H
 
+
+#include  <boost/thread/recursive_mutex.hpp>
+#include <boost/interprocess/sync/scoped_lock.hpp>
 #include <vector>
+#include <map>
 
-#include <hashint.h>
-#include <frame.h>
-#include <delegator>
+#include <hash_int.h>
+#include <frame.hpp>
+#include <delegator.hpp>
 
 
 
@@ -13,17 +18,20 @@
 
 template<typename KeyType>
 class TaskMapper {
-public: 
-   typedef boost::unordered_multimap<KeyType,Closure*> MapType;
+private:
+   typedef std::multimap<KeyType,Closure*> MapType;
+   typedef std::pair<KeyType,Closure*> MapVal;
    typedef boost::recursive_mutex RecMutex;
-   typedef boost::interprocess::scoped_lock ScopedLock;
+   typedef boost::interprocess::scoped_lock<RecMutex> ScopedLock;
+   typedef std::pair<typename MapType::iterator, typename MapType::iterator> Range;
+
 
    int mapsn;
-   Vector<MapType> maps;
-   Vector<RecMutex> mutexes;
+   std::vector<MapType> maps;
+   std::vector<RecMutex> mutexes;
 
-private:
-   TaskMapper( int _mapsn, ):
+public: 
+   TaskMapper( int _mapsn ):
       mapsn(_mapsn), maps(_mapsn), mutexes(_mapsn) {
           
         
@@ -37,31 +45,31 @@ private:
       ScopedLock scpl( mutexes[ idx ] );
 
 
-      maps[idx].emplace( MapType::value_type(k,t) );
+      maps[idx].insert( MapVal(k,t) );
 
    }
 
    void signal_evt( KeyType k ) {
+      int idx = hashzone(&k,sizeof(k));
 
       // TODO : Generic but only works when packed....
       int lock_index = hashzone(&k,sizeof(k));
       ScopedLock scpl( mutexes[ hashint(k) ] );
       
 
-      typedef std::pair<MapType::iterator> Range;
       
       // Find all occurences of Key K.
       Range all_occurences = maps[idx].equal_range( k );
 
-      for ( MapType::iterator i = all_occurences.first();
+      for ( auto i = all_occurences.first;
             i != all_occurences.second;
             ++ i ) {
           // Calls Tdec ( auto cleanup )
-          i->second()->tdec();
+          i->second->tdec();
           
       }
       // Entries cleanup.
-      maps[idx].erase( all_occurences );
+      maps[idx].erase( all_occurences.first, all_occurences.second );
 
 
    }
@@ -70,6 +78,8 @@ private:
        
    }
 
-}
+};
 
 
+
+#endif

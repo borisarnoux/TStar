@@ -1,52 +1,22 @@
 
 
+#include "mpi.h"
+#include <omp.h>
 
+#include <network.hpp>
 
-
-
-// Routable messages have orig and are forwarded.
-enum MessageTypes {
-
-  DataReqMessageType, // Routable. 
-  DataMessageType, // From Resp
-
-  RWReqType, // Routable.
-  RespTransferType, 
-  GoTransitiveType,  // Not implemented RW races yet (triggers error, TODO)
-
-  RWriteType,
-  RWriteAckType, // From Resp
-
-
-  AskInvalidateType, // Routable
-  DoInvalidateType, // From Resp.
-  AckInvalidateType,
-
-  TDecType // Routable
-
-
-}
-
-
-struct MessageHdr {
-  int from;
-  int to;
-  MessageTypes type;
-  void * data;
-  size_t data_size;
-}
 
 struct DataMessage {
   int serial;
   size_t size;
   char[] data;
-}
+};
 
 struct DataReqMessage{
   int serial;
   int orig;
   void * page;
-}
+};
 
 struct RWrite {
   int orig;
@@ -55,69 +25,60 @@ struct RWrite {
   size_t offset;
   size_t size
     char data[];
-}
+};
 
 struct RWriteAck {
   void *page;
   int serial;
-}
+};
 
 struct RWReq {
   int orig;
   void * page;
-}
+};
 
 struct RespTransfer {
   void *page;
   long long shared_nodes_bitmap;
   DataMessage datamsg;
-}
+};
 
 struct GoTransitive {
   void * page;
-}
+};
 
 struct AckInvalidate {
   int serial;
   void * page;
-}
+};
 
 struct DoInvalidate {
   int serial;
   void * page;
-}
+};
 
 struct AskInvalidate {
   node_id_t orig;
   int serial;
   void * page;
-}
+};
 
 struct TDec {
   int orig;
   int val;
   void * page;
-}
+};
 
 
-class NetworkLowLevel {
-public:
-    bool initialized;
-    int num_nodes;
-    int node_num;
 
-    NetworkLowLevel():
-      initialized(0),num_nodes(0),node_num(0) {
 
-    }
-
-    void init( int* argc, char *** argv ) {
+void NetworkLowLevel::init( int* argc, char *** argv ) {
       MPI_Init(argc, argv );
       MPI_Comm_rank(MPI_COMM_WORLD, &node_num );
       MPI_Comm_size(MPI_COMM_WORLD, &num_nodes ); 
-    }
+}
 
-    bool receive( MessageHdr &m ) {
+bool NetworkLowLevel::receive( MessageHdr &m ) {
       MPI_Status s;
       int flag = 0;
       MPI_Iprove( MPI_ANY_SOURCE,
@@ -139,22 +100,14 @@ public:
                  MPI_CHAR, s.MPI_SOURCE,
                  s.MPI_TAG, MPI_COMM_WORLD, NULL );
       return true;
-    }
-
-    void send( MessageHdr &m ) {
-      MPI_Send( m.data, m.data_size, MPI_CHAR, m.to, m.type, MPI_COMM_WORLD);
-
-    }
 }
 
-class NetworkInterface : protected NetworkLowLevel {
 
-  private:
-    void (* message_type_table[100] )(MessageHdr &);
 
-  public:
 
-    NetworkInterface() : NetworkLowLevel() {
+
+
+NetworkInterface::NetworkInterface() : NetworkLowLevel() {
 #define BIND_MT( id ) message_type_table[id##Type] = &on##id
       BIND_MT( DataMessage );
       BIND_MT( DataReqMessage );
@@ -169,9 +122,9 @@ class NetworkInterface : protected NetworkLowLevel {
       BIND_MT( RespTransfer );
 
 #undef BIND_MT
-    }
+}
 
-    void process_messages() {
+void NetworkInterface::process_messages() {
       MessageHdr m;
       while ( true ) {
         if ( ! receive( m ) ) {
@@ -181,24 +134,20 @@ class NetworkInterface : protected NetworkLowLevel {
         message_type_table[ m.type ] ( m );
       } 
 
-
       delete m.data; //Frees the message after processing.
-
-    } 
-
+} 
 
 
-    // Forwarding :
-    //
-    void forward( MessageHdr &m, node_id_t target ) {
+
+// Forwarding :
+static void NetworkInterface::forward( MessageHdr &m, node_id_t target ) {
       m.to = target;
       m.from = get_node_num();
       send( m );
-    }
+}
 
-    // Actual handlers
-
-    static void onDataMessage( MessageHdr &m ) {
+// Actual handlers
+static void NetworkInterface::onDataMessage( MessageHdr &m ) {
       // No transitive writers :
       DataMessage & drm = *(DataMessage*)m.data;
 
@@ -223,9 +172,9 @@ class NetworkInterface : protected NetworkLowLevel {
 
         // Signal data arrived :
         signal_data_arrived( drm.page );
-      }
+}
 
-      static void onDataReqMessage( MessageHdr &m ) {
+static void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         DataReqMessage & drm = (DataReqMessage *) m.data;
 
 
@@ -259,9 +208,9 @@ class NetworkInterface : protected NetworkLowLevel {
         // see invalidation.cpp
         register_copy_distribution( drm.page, drm.orig );
 
-      }
+}
 
-      static void onRWrite( MessageHdr &m ) {
+static void NetworkInterface::onRWrite( MessageHdr &m ) {
         // Check state or forward :
         RWrite & rwm = *(RWrite *) m.data;
         owm_frame_layout * fheader = GET_FHEADER( rwm.page );
@@ -290,17 +239,17 @@ class NetworkInterface : protected NetworkLowLevel {
         // Send the message.
         send( resphdr );
 
-      }
+}
 
-      static void onRwriteAck( MessageHdr &m ) {
+static void NetworkInterface::onRwriteAck( MessageHdr &m ) {
         RWriteAck &rwa = *(RWriteAck*) m.data;
 
         // Not much else to do but to signal.
         signal_rwrite_ack( rwa.page, rwa.serial );
 
-      }
+}
 
-      static void onRWReq( MessageHdr &m ) {
+static void NetworkInterface::onRWReq( MessageHdr &m ) {
         // Check the state and forward if necessary :
         RWReq & rwrm = *(RWReq*) m.data;
         owm_frame_layout * fheader = GET_HEADER( rwrm.page );
@@ -357,9 +306,9 @@ class NetworkInterface : protected NetworkLowLevel {
         send( resp_msg );    
 
         delete &resp_transfer;
-      }
+}
 
-      static void onRespTransfer( MessageHdr &m ) {
+static void NetworkInterface::onRespTransfer( MessageHdr &m ) {
 
         RespTransfer &rt = *(RespTransfer*) m.data;
         owm_frame_layout fheader = GET_FHEADER( rt.page );
@@ -376,13 +325,13 @@ class NetworkInterface : protected NetworkLowLevel {
         signal_data_arrival( page, 0 ); // special serial
         signal_write_arrival( page );
 
-      }
+}
 
-      static void onGoTransitive( MessageHdr &m ) {
+static void NetworkInterface::onGoTransitive( MessageHdr &m ) {
         FATAL( "Not yet supported" );
-      }
+}
 
-      static void onAskInvalidate( MessageHdr &m ){
+static void NetworkInterface::onAskInvalidate( MessageHdr &m ){
         AskInvalidate &ai = *(AskInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( ai.page );
 
@@ -393,9 +342,9 @@ class NetworkInterface : protected NetworkLowLevel {
 
         planify_invalidation( ai.serial, ai.page, ai.orig );
 
-      }
+}
 
-      static void onDoInvalidate( MessageHdr &m ) {
+static void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         DoInvalidate &di = *(DoInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( di.page );
 
@@ -418,10 +367,9 @@ class NetworkInterface : protected NetworkLowLevel {
 
         send( resp );
 
+}
 
-      }
-
-      static void onAckInvalidate( MessageHdr &m ) {
+static void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
         AckInvalidate &acki = *(AckInvalidate*) m.data;
         owm_frame_layout * fheader = GET_HEADER( acki.page );
 
@@ -432,10 +380,10 @@ class NetworkInterface : protected NetworkLowLevel {
         }
 
         signal_ack_invalidate( acki.serial, acki.page ); 
-      }
+}
 
 
-      static void onTDec( MessageHdr &m ) {
+static void NetworkInterface::onTDec( MessageHdr &m ) {
         TDec & tdec = *(TDec *) m.data;
 
         owm_frame_layout * fheader = GET_FHEADER( tdec.page );
@@ -446,16 +394,17 @@ class NetworkInterface : protected NetworkLowLevel {
 
 
 
-      }
+}
 
-      /*------------ Functions for sending messages---------------------- */
-      static void send_invalidate_ack( node_id_t target, serial_t serial, PageType page ) {
+/*------------ Functions for sending messages---------------------- */
+static void NetworkInterface::send_invalidate_ack( node_id_t target, serial_t serial, PageType page ) {
         if ( target == get_node_num() ) {
           // Just trigger the invalidation as done locally.
           DEBUG("Sending a message locally : this might be a bug");
           signal_ack_invalidate( serial, page );
           return;
-        }
+	  
+		}
 
 
         //  Or actually send the message.
@@ -472,9 +421,10 @@ class NetworkInterface : protected NetworkLowLevel {
 
         send( m );
 
-      } 
+} 
 
-      static void send_do_invalidate( node_id_t target, serial_t serial, PageType page ) {
+
+static void NetworkInterface::send_do_invalidate( node_id_t target, serial_t serial, PageType page ) {
         DoInvalidate di;
         di.serial = serial;
         di.page = page;
@@ -488,9 +438,9 @@ class NetworkInterface : protected NetworkLowLevel {
 
         send( m );
         
-      }
+}
 
-      static void send_ask_invalidate( node_id_t target, serial_t serial, PageType page ) {
+static void NetworkInterface::send_ask_invalidate( node_id_t target, serial_t serial, PageType page ) {
         AskInvalidate ai;
         ai.serial = serial;
         ai.page = page;
@@ -503,9 +453,9 @@ class NetworkInterface : protected NetworkLowLevel {
         m.data = &ai;
 
         send( m );
-      }
+}
 
-      static void send_data_req( node_id_t target, serial_t serial, void * page ) {
+static void NetworkInterface::send_data_req( node_id_t target, serial_t serial, void * page ) {
         DataReqMessage drm;
         drm.page = page;
         drm.orig = get_node_num();
@@ -519,9 +469,9 @@ class NetworkInterface : protected NetworkLowLevel {
         m.data = &drm;
 
         send( m );
-      }
+}
 
-      static void send_resp_req( node_id_t target, void * page ) {
+static void NetworkInterface::send_resp_req( node_id_t target, void * page ) {
         RWReq rw;
         rw.orig = get_node_num();
         rw.page = page;
@@ -534,10 +484,9 @@ class NetworkInterface : protected NetworkLowLevel {
         m.data = &rw;
 
         send( m );
+}
 
-      }
-
-      static void send_tdec( node_id_t target, void * page, int val ) {
+static void NetworkInterface::send_tdec( node_id_t target, void * page, int val ) {
         TDec tdec;
         tdec.orig = get_node_num();
         tdec.val = val;
@@ -552,7 +501,7 @@ class NetworkInterface : protected NetworkLowLevel {
 
         send( m );
 
-      }
+}
 
-    }
+
 

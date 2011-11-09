@@ -15,7 +15,8 @@ int hashint(int key) {
 }
 
 
-int hashzone( void * z, size_t size) {
+int hashzone( void * _z, size_t size) {
+  char * z = (char*) _z;
   int r = 0;
 
   while ( size >= sizeof(int) ) {

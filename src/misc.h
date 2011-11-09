@@ -5,6 +5,7 @@
 #include <config.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <syscall.h>
 #include <unistd.h>
@@ -50,7 +51,6 @@ extern "C" {
 #define _DEBUG(msg, ... )
 #endif
 
-#define max(a,b) ( (a)>(b)?(a):(b))
 
 
 #ifdef __cplusplus

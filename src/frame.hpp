@@ -1,11 +1,16 @@
-#ifndef FRAME_H
-#define FRAME_H
+#ifndef FRAME_HDR
+#define FRAME_HDR
 
+#include <stdlib.h>
+#include <identifiers.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
 #define VALID 10
-#define INVALID 11
+#define INVALID 0
 #define TRANSIENT 12
 #define RESP 13
 
@@ -25,16 +30,16 @@
 #define PAGE_IS_RESP( page ) IS_RESP( GET_FHEADER(page) )
 
 
-#define GET_FHEADER( page ) ((struct owm_frame_layout*)((intptr_t)page - sizeof(struct owm_frame_layout)))
+#define GET_FHEADER( page ) ((struct owm_frame_layout*)((intptr_t)(page) - sizeof(struct owm_frame_layout)))
+
 
 
 struct owm_frame_layout {
 	size_t data_size; // Size of
 	int proto_status; // Fresh, Invalid, TransientWriter, Responsible.
 	int version;      // In case of Invalid, version number of the last request.
-	int pagevt_dir;
-
-	char data[];
+	node_id_t next_resp;
+	char data[]; 
 };
 
 
@@ -42,22 +47,18 @@ struct frame_struct {
   struct static_data * static_data;
   long sc;
   long args[];
-}
+};
 
 struct static_data {
   void (*fn)();
   int sc;
   long arg_types[];
+};
+
+
+
+#ifdef __cplusplus
 }
-
-
-inline void * owm_malloc( size_t size ) {
-	// Allocates in private segment for data + header.
-	return ;
-}
-
-
-void own_free( size_t size ) {
-}
+#endif
 
 #endif
