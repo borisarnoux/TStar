@@ -54,7 +54,7 @@ public:
 
     bool receive( MessageHdr &m );
 
-    inline void send( MessageHdr &m ) {
+    static inline void send( MessageHdr &m ) {
       MPI_Send( m.data, m.data_size, MPI_CHAR, m.to, m.type, MPI_COMM_WORLD);
 
     }
@@ -80,41 +80,41 @@ class NetworkInterface : protected NetworkLowLevel {
 
     static void onDataMessage( MessageHdr &m );
 
-   static void onDataReqMessage( MessageHdr &m );
+	static void onDataReqMessage( MessageHdr &m );
 
 
-      static void onRWrite( MessageHdr &m );
+    static void onRWrite( MessageHdr &m );
 
-      static void onRwriteAck( MessageHdr &m );
+    static void onRWriteAck( MessageHdr &m );
 
-      static void onRWReq( MessageHdr &m );
+    static void onRWReq( MessageHdr &m );
 
-      static void onRespTransfer( MessageHdr &m ) ;
-
-
-      static void onGoTransitive( MessageHdr &m ) ;
-
-      static void onAskInvalidate( MessageHdr &m );
-
-      static void onDoInvalidate( MessageHdr &m );
-
-      static void onAckInvalidate( MessageHdr &m );
+	static void onRespTransfer( MessageHdr &m ) ;
 
 
-      static void onTDec( MessageHdr &m );
+    static void onGoTransitive( MessageHdr &m ) ;
+
+    static void onAskInvalidate( MessageHdr &m );
+
+    static void onDoInvalidate( MessageHdr &m );
+
+    static void onAckInvalidate( MessageHdr &m );
+
+
+    static void onTDec( MessageHdr &m );
 
       /*------------ Functions for sending messages---------------------- */
-      static void send_invalidate_ack( node_id_t target, serial_t serial, PageType page );
+    static void send_invalidate_ack( node_id_t target, PageType page );
 
-      static void send_do_invalidate( node_id_t target, serial_t serial, PageType page );
+    static void send_do_invalidate( node_id_t target, PageType page );
 
-      static void send_ask_invalidate( node_id_t target, serial_t serial, PageType page );
+    static void send_ask_invalidate( node_id_t target,  PageType page );
 
-      static void send_data_req( node_id_t target, serial_t serial, void * page );
+    static void send_data_req( node_id_t target,  void * page );
 
-      static void send_resp_req( node_id_t target, void * page );
+    static void send_resp_req( node_id_t target, void * page );
 
-      static void send_tdec( node_id_t target, void * page, int val );
+    static void send_tdec( node_id_t target, void * page, int val );
 };
 
 

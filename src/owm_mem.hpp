@@ -14,7 +14,7 @@ extern void ask_or_do_invalidation( void *page );
 void * owm_malloc( size_t size ) {
 	// Allocates in private segment for data + header.
 	struct owm_frame_layout * retval =  (struct owm_frame_layout*) mapper_malloc( size + sizeof(struct owm_frame_layout) );
-	retval->data_size = size;
+	retval->size = size;
 	int proto_status = RESP;
 	
 	return retval->data;

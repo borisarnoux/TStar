@@ -35,7 +35,7 @@ extern "C" {
 
 
 struct owm_frame_layout {
-	size_t data_size; // Size of
+	size_t size; // Size of
 	int proto_status; // Fresh, Invalid, TransientWriter, Responsible.
 	int version;      // In case of Invalid, version number of the last request.
 	node_id_t next_resp;

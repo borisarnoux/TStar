@@ -1,6 +1,8 @@
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
 
 #include <boost/interprocess/managed_external_buffer.hpp>
+
+#include <node.h>
 
 #include <sys/mman.h>
 #include <stdio.h>
@@ -17,8 +19,7 @@
 
 
 
-
-basic_managed_external_buffer * local_heap;
+boost::interprocess::managed_external_buffer * local_heap;
 using namespace boost::interprocess;
 
 size_t zone_len = 0;
@@ -41,7 +42,7 @@ void mapper_initialize_address_space ( void * base, size_t len_pernode, int _nno
 	zone_len = (~(PAGE_LEN-1))& len_pernode;
 	
 	// Aligns the base...
-	start_addr = (void *) ( (~(uintptr_t) (PAGE_LEN-1))& (uintptr_t) base );
+	char * start_addr = (char *) ( (~(uintptr_t) (PAGE_LEN-1))& (uintptr_t) base );
 
 	// Does the Mapping :
 
@@ -49,7 +50,7 @@ void mapper_initialize_address_space ( void * base, size_t len_pernode, int _nno
     void *local_start = start_addr + i * zone_len;
     
     if ( i == get_node_num() ) {
-      local_heap = new basic_managed_external_buffer(create_only, local_heap, zone_len);
+      local_heap = new managed_external_buffer(create_only, local_heap, zone_len);
     }
 
 		mapper_map_private( start_addr + i * zone_len, zone_len );

@@ -1,19 +1,22 @@
 
 
 #include "mpi.h"
+
+#include <misc.h>
 #include <omp.h>
-
+#include <frame.hpp>
+#include <node.h>
+#include <identifiers.h>
 #include <network.hpp>
-
+#include <data_events.hpp>
 
 struct DataMessage {
-  int serial;
+  void * page;
   size_t size;
-  char[] data;
+  char data[];
 };
 
 struct DataReqMessage{
-  int serial;
   int orig;
   void * page;
 };
@@ -23,7 +26,7 @@ struct RWrite {
   int serial;
   void * page;
   size_t offset;
-  size_t size
+  size_t size;
     char data[];
 };
 
@@ -48,18 +51,15 @@ struct GoTransitive {
 };
 
 struct AckInvalidate {
-  int serial;
   void * page;
 };
 
 struct DoInvalidate {
-  int serial;
   void * page;
 };
 
 struct AskInvalidate {
   node_id_t orig;
-  int serial;
   void * page;
 };
 
@@ -81,7 +81,7 @@ void NetworkLowLevel::init( int* argc, char *** argv ) {
 bool NetworkLowLevel::receive( MessageHdr &m ) {
       MPI_Status s;
       int flag = 0;
-      MPI_Iprove( MPI_ANY_SOURCE,
+      MPI_Iprobe( MPI_ANY_SOURCE,
                   MPI_ANY_TAG,
                   MPI_COMM_WORLD,
                   &flag, &s );
@@ -91,9 +91,10 @@ bool NetworkLowLevel::receive( MessageHdr &m ) {
 
       m.from = s.MPI_SOURCE;
       m.to   = get_node_num();
-      m.type = s.MPI_TAG;
+      m.type = (MessageTypes) s.MPI_TAG;
       // Get size :
-      MPI_Get_Count( &s, MPI_CHAR, &m.data_size );
+	  
+      MPI_Get_count( &s, MPI_CHAR, (int*)&m.data_size );
       m.data = new char[m.data_size];
 
       MPI_Recv( m.data, m.data_size,
@@ -140,25 +141,21 @@ void NetworkInterface::process_messages() {
 
 
 // Forwarding :
-static void NetworkInterface::forward( MessageHdr &m, node_id_t target ) {
+
+void NetworkInterface::forward( MessageHdr &m, node_id_t target ) {
       m.to = target;
       m.from = get_node_num();
       send( m );
 }
 
 // Actual handlers
-static void NetworkInterface::onDataMessage( MessageHdr &m ) {
+void NetworkInterface::onDataMessage( MessageHdr &m ) {
       // No transitive writers :
       DataMessage & drm = *(DataMessage*)m.data;
 
       struct owm_frame_layout *fheader = 
         (struct owm_frame_layout*) drm.page;
 
-      // Check serial :
-      if ( drm.serial != fheader->serial ) {
-        return;
-          return;
-        }
 
         fheader->size = drm.size;
 
@@ -174,7 +171,7 @@ static void NetworkInterface::onDataMessage( MessageHdr &m ) {
         signal_data_arrived( drm.page );
 }
 
-static void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
+void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         DataReqMessage & drm = (DataReqMessage *) m.data;
 
 
@@ -188,7 +185,6 @@ static void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         // Build an answer.
         DataMessage & resp = *( new char[sizeof(DataMessage) +fheader->size] );
 
-        resp.serial = drm.serial;
         resp.size = fheader.size;
         memcpy( resp.data, drm.page, fheader->size );
 
@@ -210,7 +206,7 @@ static void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
 
 }
 
-static void NetworkInterface::onRWrite( MessageHdr &m ) {
+void NetworkInterface::onRWrite( MessageHdr &m ) {
         // Check state or forward :
         RWrite & rwm = *(RWrite *) m.data;
         owm_frame_layout * fheader = GET_FHEADER( rwm.page );
@@ -226,7 +222,6 @@ static void NetworkInterface::onRWrite( MessageHdr &m ) {
 
         // Then send ack :
         RWriteAck rwa;
-        rwa.serial = rwm.serial;
         rwa.page = rwm.page;
 
         MessageHdr resphdr;
@@ -241,18 +236,18 @@ static void NetworkInterface::onRWrite( MessageHdr &m ) {
 
 }
 
-static void NetworkInterface::onRwriteAck( MessageHdr &m ) {
+void NetworkInterface::onRWriteAck( MessageHdr &m ) {
         RWriteAck &rwa = *(RWriteAck*) m.data;
 
         // Not much else to do but to signal.
-        signal_rwrite_ack( rwa.page, rwa.serial );
+        signal_rwrite_ack( rwa.page );
 
 }
 
-static void NetworkInterface::onRWReq( MessageHdr &m ) {
+void NetworkInterface::onRWReq( MessageHdr &m ) {
         // Check the state and forward if necessary :
         RWReq & rwrm = *(RWReq*) m.data;
-        owm_frame_layout * fheader = GET_HEADER( rwrm.page );
+        owm_frame_layout * fheader = GET_FHEADER( rwrm.page );
 
         // Check or forward.
         if ( ! IS_RESP( fheader ) ) {
@@ -308,7 +303,7 @@ static void NetworkInterface::onRWReq( MessageHdr &m ) {
         delete &resp_transfer;
 }
 
-static void NetworkInterface::onRespTransfer( MessageHdr &m ) {
+void NetworkInterface::onRespTransfer( MessageHdr &m ) {
 
         RespTransfer &rt = *(RespTransfer*) m.data;
         owm_frame_layout fheader = GET_FHEADER( rt.page );
@@ -322,16 +317,16 @@ static void NetworkInterface::onRespTransfer( MessageHdr &m ) {
         RESPONSIBILIZE( fheader );
 
         // Signal read and write data arrival :
-        signal_data_arrival( page, 0 ); // special serial
+        signal_data_arrival( page);
         signal_write_arrival( page );
 
 }
 
-static void NetworkInterface::onGoTransitive( MessageHdr &m ) {
+void NetworkInterface::onGoTransitive( MessageHdr &m ) {
         FATAL( "Not yet supported" );
 }
 
-static void NetworkInterface::onAskInvalidate( MessageHdr &m ){
+void NetworkInterface::onAskInvalidate( MessageHdr &m ){
         AskInvalidate &ai = *(AskInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( ai.page );
 
@@ -340,11 +335,11 @@ static void NetworkInterface::onAskInvalidate( MessageHdr &m ){
           return;
         } 
 
-        planify_invalidation( ai.serial, ai.page, ai.orig );
+        planify_invalidation( ai.page, ai.orig );
 
 }
 
-static void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
+void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         DoInvalidate &di = *(DoInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( di.page );
 
@@ -355,7 +350,6 @@ static void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
 
         // Respond do invalidate.
         AckInvalidate ackinvalidate;
-        ackinvalidate.serial = di.serial;
         ackinvalidate.page = di.page;
 
         MessageHdr resp;
@@ -369,9 +363,9 @@ static void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
 
 }
 
-static void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
+void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
         AckInvalidate &acki = *(AckInvalidate*) m.data;
-        owm_frame_layout * fheader = GET_HEADER( acki.page );
+        owm_frame_layout * fheader = GET_FHEADER( acki.page );
 
         if ( !IS_RESP( fheader ) ) {
           // Then resp is the sender :
@@ -379,11 +373,11 @@ static void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
           fheader->next_resp = m.from;
         }
 
-        signal_ack_invalidate( acki.serial, acki.page ); 
+        signal_ack_invalidate(  acki.page ); 
 }
 
 
-static void NetworkInterface::onTDec( MessageHdr &m ) {
+void NetworkInterface::onTDec( MessageHdr &m ) {
         TDec & tdec = *(TDec *) m.data;
 
         owm_frame_layout * fheader = GET_FHEADER( tdec.page );
@@ -397,11 +391,11 @@ static void NetworkInterface::onTDec( MessageHdr &m ) {
 }
 
 /*------------ Functions for sending messages---------------------- */
-static void NetworkInterface::send_invalidate_ack( node_id_t target, serial_t serial, PageType page ) {
+void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page ) {
         if ( target == get_node_num() ) {
           // Just trigger the invalidation as done locally.
           DEBUG("Sending a message locally : this might be a bug");
-          signal_ack_invalidate( serial, page );
+          signal_ack_invalidate(  page );
           return;
 	  
 		}
@@ -410,7 +404,6 @@ static void NetworkInterface::send_invalidate_ack( node_id_t target, serial_t se
         //  Or actually send the message.
         AckInvalidate ai;
         ai.page = page;
-        ai.serial = serial;
 
         MessageHdr m;
         m.from = get_node_num();
@@ -424,9 +417,8 @@ static void NetworkInterface::send_invalidate_ack( node_id_t target, serial_t se
 } 
 
 
-static void NetworkInterface::send_do_invalidate( node_id_t target, serial_t serial, PageType page ) {
+void NetworkInterface::send_do_invalidate( node_id_t target,  PageType page ) {
         DoInvalidate di;
-        di.serial = serial;
         di.page = page;
 
         MessageHdr m;
@@ -440,9 +432,8 @@ static void NetworkInterface::send_do_invalidate( node_id_t target, serial_t ser
         
 }
 
-static void NetworkInterface::send_ask_invalidate( node_id_t target, serial_t serial, PageType page ) {
+void NetworkInterface::send_ask_invalidate( node_id_t target, PageType page ) {
         AskInvalidate ai;
-        ai.serial = serial;
         ai.page = page;
         
         MessageHdr m;
@@ -455,11 +446,10 @@ static void NetworkInterface::send_ask_invalidate( node_id_t target, serial_t se
         send( m );
 }
 
-static void NetworkInterface::send_data_req( node_id_t target, serial_t serial, void * page ) {
+void NetworkInterface::send_data_req( node_id_t target, void * page ) {
         DataReqMessage drm;
         drm.page = page;
         drm.orig = get_node_num();
-        drm.serial = serial;
 
         MessageHdr m;
         m.from = get_node_num();
@@ -471,7 +461,7 @@ static void NetworkInterface::send_data_req( node_id_t target, serial_t serial, 
         send( m );
 }
 
-static void NetworkInterface::send_resp_req( node_id_t target, void * page ) {
+void NetworkInterface::send_resp_req( node_id_t target, void * page ) {
         RWReq rw;
         rw.orig = get_node_num();
         rw.page = page;
@@ -486,7 +476,7 @@ static void NetworkInterface::send_resp_req( node_id_t target, void * page ) {
         send( m );
 }
 
-static void NetworkInterface::send_tdec( node_id_t target, void * page, int val ) {
+void NetworkInterface::send_tdec( node_id_t target, void * page, int val ) {
         TDec tdec;
         tdec.orig = get_node_num();
         tdec.val = val;

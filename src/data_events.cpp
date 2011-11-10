@@ -1,36 +1,48 @@
-
+#include <data_events.hpp>
 #include <identifiers.h>
-#include <mappable_event>
+#include <mappable_event.hpp>
 
 
 // This is a task mapper for arriving reads.
-TaskMapper write_arrived_mapper;
-TaskMapper data_arrived_mapper;
+TaskMapper<PageType> write_arrived_mapper(2);
+TaskMapper<PageType> data_arrived_mapper(2);
 
 // This is a task mapper for arriving write commits: 
 struct commit_key_struct {
+  bool operator<(const commit_key_struct &other) const {
+	if ( this->page == other.page ) {
+	  return this->serial < other.serial;
+	}
+	return this->page < other.page;
+  }
+  
+  bool operator==(const commit_key_struct &other) const {
+	return this->page == other.page && this->serial == other.serial;
+  	
+  }
   serial_t serial;
   PageType page;  
 } __attribute__((packed));
 
-TaskMapper write_commit_mapper;
+
+TaskMapper<commit_key_struct> write_commit_mapper(2);
 
 
 
 
 void signal_write_arrived( PageType page ) {
-    write_arrived_mapper.activate( page ); 
+    write_arrived_mapper.signal_evt( page ); 
 }
 
 
 void signal_write_commited( serial_t serial, PageType page) {
      struct commit_key_struct key = {serial,page};
-     write_commit_mapper.activate( key );
+     write_commit_mapper.signal_evt( key );
 }
 
 
 void signal_data_arrived(PageType page ) {
-    data_arrived_mapper.activate( page );
+    data_arrived_mapper.signal_evt( page );
 }
 
 
@@ -55,8 +67,7 @@ void acquire_rec( complex_obj_t ptr, Closure * t ) {
     // For branches, we recurse.
      
   } else { // ressources need prior acquision.
-    // Self schedule on data arrival.
-    
+    // Self schedule on data arrival.    
     auto c = new_Closure( 1, {
       acquire_rec( ptr, t );
         });
