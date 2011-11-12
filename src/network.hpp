@@ -74,7 +74,7 @@ class NetworkInterface : protected NetworkLowLevel {
 
     // Forwarding :
     //
-    void forward( MessageHdr &m, node_id_t target );
+    static void forward( MessageHdr &m, node_id_t target );
 
     // Actual handlers
 

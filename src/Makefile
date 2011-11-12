@@ -7,6 +7,11 @@ SOURCES_C=$(wildcard *.c)
 O_FILES=$(patsubst %.cpp,%.o, $(SOURCES_CPP))
 
 
+
+
+all : exec
+	
+
 exec : $(O_FILES)
 	mpic++ -o $@ $^
 

@@ -7,6 +7,7 @@
 #include <frame.hpp>
 #include <node.h>
 #include <identifiers.h>
+#include <invalidation.hpp>
 #include <network.hpp>
 #include <data_events.hpp>
 
@@ -135,7 +136,7 @@ void NetworkInterface::process_messages() {
         message_type_table[ m.type ] ( m );
       } 
 
-      delete m.data; //Frees the message after processing.
+      delete[] (char *)m.data; //Frees the message after processing.
 } 
 
 
@@ -168,31 +169,32 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
         memcpy( drm.page, drm.data, drm.size );
 
         // Signal data arrived :
-        signal_data_arrived( drm.page );
+        signal_data_arrival( drm.page );
 }
 
 void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
-        DataReqMessage & drm = (DataReqMessage *) m.data;
+        DataReqMessage & drm = *(DataReqMessage *) m.data;
 
 
         owm_frame_layout *fheader = GET_FHEADER( drm.page );
-        if ( !IS_RESP( drm.page )) {
+
+        if ( !IS_RESP( fheader )) {
           forward( m, fheader->next_resp );
           return;
         }
 
 
         // Build an answer.
-        DataMessage & resp = *( new char[sizeof(DataMessage) +fheader->size] );
+        DataMessage & resp = *((DataMessage*) new char[sizeof(DataMessage) +fheader->size] );
 
-        resp.size = fheader.size;
+        resp.size = fheader->size;
         memcpy( resp.data, drm.page, fheader->size );
 
         // Send it :
         MessageHdr resphdr;
         resphdr.from = get_node_num();
         resphdr.to = drm.orig;
-        resphdr.type = MessageTypes.DataMessage;
+        resphdr.type = DataMessageType;
         resphdr.data = &resp;
         resphdr.data_size = sizeof(DataMessage) + fheader->size;
 
@@ -218,7 +220,7 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
 
         // Case of a resp node :
         // Integrate the write :
-        memcpy( rwm.page + rwm.offset, rwm.data, rwm.size );
+        memcpy( (char*)rwm.page + rwm.offset, rwm.data, rwm.size );
 
         // Then send ack :
         RWriteAck rwa;
@@ -227,7 +229,7 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
         MessageHdr resphdr;
         resphdr.from = get_node_num();
         resphdr.to = rwm.orig;
-        resphdr.type = MessageTypes.RWriteAckType;
+        resphdr.type = RWriteAckType;
         resphdr.data = &rwa;
         resphdr.data_size = sizeof( RWriteAck );
 
@@ -240,7 +242,7 @@ void NetworkInterface::onRWriteAck( MessageHdr &m ) {
         RWriteAck &rwa = *(RWriteAck*) m.data;
 
         // Not much else to do but to signal.
-        signal_rwrite_ack( rwa.page );
+        signal_write_commited( rwa.serial, rwa.page );
 
 }
 
@@ -257,7 +259,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
 
         // If this page has no current writers :
         if ( HAS_ZERO_COUNT( fheader ) ) {
-          VALIDIZE( fheader );
+          VALIDATE( fheader );
         } else {
 
           // This shouldn't happen : (for now ) TODO
@@ -271,7 +273,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
           MessageHdr resp;
           resp.from = get_node_num();
           resp.to = rwrm.orig;
-          resp.type = MessageTypes.GoTransitiveType;
+          resp.type = GoTransitiveType;
           resp.data_size = sizeof( GoTransitive);
           resp.data = &gtresp;
 
@@ -282,12 +284,12 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
 
 
         // Transfers the responsibility :
-        fheader.next_resp = rwrm.orig;
+        fheader->next_resp = rwrm.orig;
         RespTransfer & resp_transfer = *( RespTransfer * ) new char[sizeof(RespTransfer)+fheader->size];
-        resp_transfer.size = fheader->size;
-        resp_transfer.shared_nodes_bitmap = export_and_clear_shared_set();
-        resp_transfer.page = rwrm.page;
-        memcpy( resp_transfer.data, fheader->data, fheader->size );
+        resp_transfer.datamsg.size = fheader->size;
+        resp_transfer.shared_nodes_bitmap = export_and_clear_shared_set(rwrm.page);
+        resp_transfer.datamsg.page = rwrm.page;
+        memcpy( resp_transfer.datamsg.data, fheader->data, fheader->size );
 
 
         MessageHdr resp_msg;
@@ -300,25 +302,25 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
 
         send( resp_msg );    
 
-        delete &resp_transfer;
+        delete[] (char*)&resp_transfer;
 }
 
 void NetworkInterface::onRespTransfer( MessageHdr &m ) {
 
         RespTransfer &rt = *(RespTransfer*) m.data;
-        owm_frame_layout fheader = GET_FHEADER( rt.page );
+        owm_frame_layout *fheader = GET_FHEADER( rt.page );
 
         CFATAL ( IS_RESP( fheader ), "Already resp, an error occured" );
-        CFATAL( IS_TRANSITIVE( fheader ), "Transitive state not allowed to receive resp" );
+        CFATAL( IS_TRANSIENT( fheader ), "Transitive state not allowed to receive resp" );
 
         // Erases the data :
-        memcpy( fheader->data, rt.data, rt.size );
+        memcpy( fheader->data, rt.datamsg.data, rt.datamsg.size );
         // Set resp :
         RESPONSIBILIZE( fheader );
 
         // Signal read and write data arrival :
-        signal_data_arrival( page);
-        signal_write_arrival( page );
+        signal_data_arrival( rt.datamsg.page);
+        signal_write_arrival( rt.datamsg.page );
 
 }
 
@@ -344,7 +346,7 @@ void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         owm_frame_layout * fheader = GET_FHEADER( di.page );
 
         CFATAL( IS_RESP( fheader), "Cannot invalidate RESP" );
-        CFATAL( IS_TRANSITIVE( fheader ), "No transitive message should be received");
+        CFATAL( IS_TRANSIENT( fheader ), "No transitive message should be received");
 
         INVALIDATE( fheader );
 
@@ -369,11 +371,11 @@ void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
 
         if ( !IS_RESP( fheader ) ) {
           // Then resp is the sender :
-          CFATAL( ! fheader->initialized, "Unitinialized data shouldn't receive InvalidateAck");
+          //CFATAL( ! fheader->initialized, "Unitinialized data shouldn't receive InvalidateAck");
           fheader->next_resp = m.from;
         }
 
-        signal_ack_invalidate(  acki.page ); 
+        signal_invalidation_ack(  acki.page );
 }
 
 
@@ -386,6 +388,10 @@ void NetworkInterface::onTDec( MessageHdr &m ) {
           forward( m, fheader->next_resp );
         }
 
+        // Do Tdec :
+        struct frame_struct * frame_struct_p =
+                (struct frame_struct*) fheader->data;
+
 
 
 }
@@ -395,7 +401,7 @@ void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page ) {
         if ( target == get_node_num() ) {
           // Just trigger the invalidation as done locally.
           DEBUG("Sending a message locally : this might be a bug");
-          signal_ack_invalidate(  page );
+          signal_invalidation_ack(  page );
           return;
 	  
 		}

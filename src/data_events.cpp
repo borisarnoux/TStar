@@ -30,7 +30,7 @@ TaskMapper<commit_key_struct> write_commit_mapper(2);
 
 
 
-void signal_write_arrived( PageType page ) {
+void signal_write_arrival( PageType page ) {
     write_arrived_mapper.signal_evt( page ); 
 }
 
@@ -41,14 +41,22 @@ void signal_write_commited( serial_t serial, PageType page) {
 }
 
 
-void signal_data_arrived(PageType page ) {
+void signal_data_arrival(PageType page ) {
     data_arrived_mapper.signal_evt( page );
+}
+
+void register_for_data_arrival( PageType page, Closure * c ) {
+    data_arrived_mapper.register_evt(page, c);
+}
+
+void register_for_write_arrival( PageType page, Closure * c ) {
+    write_arrived_mapper.register_evt(page, c);
 }
 
 
 // To be called onto complex objects only.
 // This local task typically performs a tdec.
-void acquire_rec( complex_obj_t ptr, Closure * t ) {
+void acquire_rec( fat_pointer_p ptr, Closure * t ) {
   // ptr is a recursive object description pointer.
   
   // The strategy we follow is simple : 
@@ -72,15 +80,17 @@ void acquire_rec( complex_obj_t ptr, Closure * t ) {
       acquire_rec( ptr, t );
         });
 
-    serial_t serial = request_data( ptr );
-    register_for_data_arrival( serial, ptr, t );
+    register_for_data_arrival(ptr, t );
 
 
   }
 }
 
-void release_rec( complex_obj_t ptr ) {
+void release_rec( fat_pointer_p ptr ) {
   
 
 }
 
+void ask_or_do_tdec( void * page ) {
+    FATAL("Not implemented");
+}

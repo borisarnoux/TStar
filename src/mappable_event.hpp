@@ -54,7 +54,7 @@ public:
 
       // TODO : Generic but only works when packed....
       int lock_index = hashzone(&k,sizeof(k));
-      ScopedLock scpl( mutexes[ hashint(k) ] );
+      ScopedLock scpl( mutexes[ hashzone(&k, sizeof(KeyType)) ] );
       
 
       

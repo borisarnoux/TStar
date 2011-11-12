@@ -37,6 +37,10 @@ void register_copy_distribution( void * page, node_id_t nodeid ) {
 }
 
 
+void signal_invalidation_ack( PageType page ) {
+    invalidation_tm.signal_evt(page);
+}
+
 long long export_and_clear_shared_set( void * page ) {
   RespSharedMapRange r = resp_shared_map.equal_range(page);
 

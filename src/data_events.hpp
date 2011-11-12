@@ -7,12 +7,13 @@
 #include <fat_pointers.hpp>
 
 
-void signal_write_arrived( PageType page );
+void signal_write_arrival( PageType page );
 void signal_write_commited( serial_t serial, PageType page);
-void signal_data_arrived(PageType page );
+void signal_data_arrival(PageType page );
 void acquire_rec( fat_pointer_p ptr, Closure * t );
 void release_rec( fat_pointer_p ptr );
-
+void register_for_data_arrival( PageType page, Closure * c );
+void register_for_write_arrival( PageType page, Closure * c );
 
 #endif
 
