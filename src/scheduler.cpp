@@ -1,9 +1,10 @@
+#include <omp.h>
+#include <list>
 
 #include <scheduler.hpp>
-#include <list>
 #include <fat_pointers.hpp>
 #include <identifiers.h>
-#include <omp.h>
+#include <data_events.hpp>
 /* This small scheduler class actually keeps track of the tasks when it is needed only */
 
 
@@ -48,24 +49,23 @@ public :
             auto todo = new_Closure( 1,
             { prepare_ressources( page ); } );
 
-        int serial = request_page (page);
-        register_for_data_arrival( page, todo );
+            register_for_data_arrival( page, todo );
 
-        return;
-    }
-
-    for ( int i = 0; i < page->static_data->nfields; ++ i ) {
-        if ( page->static_data.fields[i] == ACQUIRE_SIMPLE_R
-             || page->static_data.fields[i] == ACQUIRE_SIMPLE_RW
-             ||  page->static_data.fields[i] == ACQUIRE_COMPLEX ) {
-            work_count += 1;
+            return;
         }
+
+        for ( int i = 0; i < page->static_data->nargs; ++ i ) {
+            if ( page->static_data->fields[i] == R_FRAME_TYPE
+              || page->static_data->fields[i] == RW_FRAME_TYPE
+              ||  page->static_data->fields[i] == FATP_TYPE ) {
+                work_count += 1;
+            }
 
         // Will be mapped once more for writing :
-        if (  page->static_data.fields[i] == ACQUIRE_SIMPLE_RW ) {
-            work_count += 1;
-        }
-    }
+            if (  page->static_data.fields[i] == RW_FRAME_TYPE ) {
+                work_count += 1;
+            }
+         }
 
 
     if ( work_count == 0 ) {
@@ -247,8 +247,8 @@ class ExecutionUnit {
             // We create a continuation :
             Closure * dotdecs = new_Closure( 1,// Because only one frame or object
                    {
-                for ( auto i = frame_tdecs.begin();
-                      i != frame_tdecs.end(); ++ i ) {
+                for ( auto i = frame_tdecs->begin();
+                      i != frame_tdecs->end; ++ i ) {
                         ask_or_do_tdec(i->page);
                 }
                 delete frame_tdecs;

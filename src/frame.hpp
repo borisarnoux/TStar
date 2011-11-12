@@ -27,7 +27,7 @@ extern "C" {
 #define  VALIDATE( fh ) PROTO_TO_STATE( (fh), VALID )
 
 #define IS_INVALID( fh ) ((fh)->proto_status == INVALID )
-#define IS_AVAILABLE_( fh ) IS_VALID_OR_RESP(fh)
+#define IS_AVAILABLE( fh ) IS_VALID_OR_RESP(fh)
 #define IS_VALID_OR_RESP( fh ) ((fh)->proto_status == VALID || (fh)->proto_status == RESP )
 #define IS_RESP( fh ) ((fh)->proto_status == RESP )
 #define IS_VALID( fh ) ((fh)->proto_status == VALID )
