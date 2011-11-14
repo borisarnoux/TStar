@@ -76,7 +76,7 @@ public :
     void schedule_external( struct frame_struct * page );
 
 
-    void prepare_ressources_rec( fat_pointer_p fat, Closure * c );
+    void get_ressources_rec( fat_pointer_p fat, Closure * c );
 
     // This function won't keep track of the task, will instead spawn local tasks to handle the ressources it needs (and thus hide latency)
     void prepare_ressources( struct frame_struct * page );

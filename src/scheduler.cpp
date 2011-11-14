@@ -208,14 +208,14 @@ void Scheduler::schedule_external( struct frame_struct * page ) {
 }
 
 
-void Scheduler::prepare_ressources_rec( fat_pointer_p fat, Closure * c ) {
+void Scheduler::get_ressources_rec( fat_pointer_p fat, Closure * c ) {
     // This function gets all the data from the fat pointer.
 
     // It reschedules itself at page arrival if necessary.
     if ( !PAGE_IS_AVAILABLE(fat) ) {
         request_page_data(fat);
         Closure * do_later = new_Closure( 1,
-        {   prepare_ressources_rec( fat, c ); });
+        {   get_ressources_rec( fat, c ); });
     register_for_data_arrival(fat, do_later);
 }
 
@@ -228,7 +228,7 @@ for ( int i = 0; i < fat->use_count; ++ i ) {
     switch( fat->elements[i].type ) {
 
     case FATP_TYPE :
-        prepare_ressources_rec( (fat_pointer_p) fat->elements[i].page, completionC);
+        get_ressources_rec( (fat_pointer_p) fat->elements[i].page, completionC);
         break;
 
     case R_FRAME_TYPE :
@@ -273,8 +273,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
     register_for_data_arrival( page, todo );
 
     return;
-}
-
+    }
 for ( int i = 0; i < page->static_data->nargs; ++ i ) {
     if ( page->static_data->arg_types[i] == R_FRAME_TYPE
          || page->static_data->arg_types[i] == RW_FRAME_TYPE
@@ -320,7 +319,7 @@ for ( int i = 0; i < page->static_data->nargs; ++ i ) {
 
     if (   page->static_data->arg_types[i] == FATP_TYPE ) {
 
-        prepare_ressources_rec((fat_pointer_p) page->args[i], gotoinnersched );
+        get_ressources_rec((fat_pointer_p) page->args[i], gotoinnersched );
     }
 }
 
