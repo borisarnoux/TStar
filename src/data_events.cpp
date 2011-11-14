@@ -1,7 +1,8 @@
 #include <data_events.hpp>
 #include <identifiers.h>
 #include <mappable_event.hpp>
-
+#include <network.hpp>
+#include <mapper.h>
 
 // This is a task mapper for arriving reads.
 TaskMapper<PageType> write_arrived_mapper(2);
@@ -52,6 +53,29 @@ void register_for_data_arrival( PageType page, Closure * c ) {
 void register_for_write_arrival( PageType page, Closure * c ) {
     write_arrived_mapper.register_evt(page, c);
 }
+
+
+void request_page_data( PageType page ) {
+    FATAL("Not implemented."); // TODO
+}
+
+void request_page_resp( PageType page ) {
+    // Send a resp message.
+    // On write arrival, increment use count.
+    if ( PAGE_IS_RESP(page)) {
+        FATAL( "Error : requesting an already responsible page.");
+    }
+
+    Closure * incrementor = new_Closure( 1, {
+                                         GET_FHEADER(page)->usecount+=1;
+                        }
+           );
+
+    // TODO : make a page only requested once.
+    NetworkInterface::send_resp_req( mapper_who_owns(page),page);
+
+}
+
 
 
 // To be called onto complex objects only.

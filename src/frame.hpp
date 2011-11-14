@@ -59,7 +59,7 @@ struct owm_frame_layout {
 struct frame_struct {
   struct static_data * static_data;
   long sc;
-  long args[];
+  void* args[];
 };
 
 struct static_data {

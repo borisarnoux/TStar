@@ -1,10 +1,11 @@
 #include <omp.h>
 #include <list>
-
+#include <map>
 #include <scheduler.hpp>
 #include <fat_pointers.hpp>
 #include <identifiers.h>
 #include <data_events.hpp>
+#include <invalidation.hpp>
 /* This small scheduler class actually keeps track of the tasks when it is needed only */
 
 
@@ -43,6 +44,7 @@ public :
         // Then we need to plan recursively the ressource acquisition.
         // Finallly, the total number of sub-tasks we created is used as trigger level for the next step.
 
+        delegator_only();
 	int work_count = 0;
 	if ( !PAGE_IS_AVAILABLE( page ) ) {
             // Then schedule itself for when its ready :p
@@ -55,51 +57,61 @@ public :
         }
 
         for ( int i = 0; i < page->static_data->nargs; ++ i ) {
-            if ( page->static_data->fields[i] == R_FRAME_TYPE
-              || page->static_data->fields[i] == RW_FRAME_TYPE
-              ||  page->static_data->fields[i] == FATP_TYPE ) {
-                work_count += 1;
+            if ( page->static_data->arg_types[i] == R_FRAME_TYPE
+              || page->static_data->arg_types[i] == RW_FRAME_TYPE
+              ||  page->static_data->arg_types[i] == FATP_TYPE ) {
+                if ( !PAGE_IS_AVAILABLE(page->args[i]) ) {
+                    work_count += 1;
+                }
             }
 
-        // Will be mapped once more for writing :
-            if (  page->static_data.fields[i] == RW_FRAME_TYPE ) {
-                work_count += 1;
+            // Will be mapped once more for writing :
+            if (  page->static_data->arg_types[i] == RW_FRAME_TYPE ) {
+                if ( !PAGE_IS_RESP(page->args[i]) ) {
+                    work_count += 1;
+                }
             }
-         }
+        }
 
 
-    if ( work_count == 0 ) {
-        schedule_inner( page );
-        return;
+        if ( work_count == 0 ) {
+            schedule_inner( page );
+            return;
+        }
+
+        auto gotoinnersched  = new_Closure( work_count,
+         {schedule_inner( page );}
+        );
+
+
+        for ( int i = 0; i < page->static_data->nargs; ++ i ) {
+            if ( page->static_data->arg_types[i] == R_FRAME_TYPE ) {
+                if ( !PAGE_IS_AVAILABLE(page->args[i])) {
+                    request_page_data(page->args[i]);
+                    register_for_data_arrival( page->args[i], gotoinnersched );
+
+                }
+            }
+
+            if (  page->static_data->arg_types[i] == RW_FRAME_TYPE ) {
+                request_page_resp(page->args[i]);
+                register_for_data_arrival( page->args[i], gotoinnersched);
+                register_for_write_arrival( page->args[i], gotoinnersched );
+            }
+
+            if (   page->static_data->arg_types[i] == FATP_TYPE ) {
+
+                prepare_data_rec( page->args[i], gotoinnersched );
+            }
+        }
+
     }
-
-    auto gotoinnersched  = new_ClosureLocalTask( work_count,
-        {schedule_inner( page );}
-    );
-
-
-    for ( int i = 0; i < page->static_data->nfields; ++ i ) {
-        if ( page->static_data.fields[i] == ACQUIRE_SIMPLE_R ) {
-            register_for_data_arrival( page->fields[i], gotoinnersched );
-        }
-
-        if (  page->static_data.fields[i] == ACQUIRE_SIMPLE_RW ) {
-            register_for_data_arrival( page->fields[i], gotoinnersched);
-            register_for_write_arrival( page->fields[i], gotoinnersched );
-        }
-
-        if (   page->static_data.fields[i] == ACQUIRE_COMPLEX ) {
-            prepare_data_rec( page->fields[i], gotoinnersched );
-        }
-    }
-
-}
 
 
 // This yields to the inner scheduler.
 static void schedule_inner( struct frame_struct * page ) {
 #pragma omp task
-    executor( page );
+    ExecutionUnit::executor( page );
 }
 
 
@@ -121,21 +133,21 @@ int steal_tasks( struct frame_struct * buffer, int amount ) {
     return amount;
 }
 
-int get_refund( int amount ) {
-    delegate_only();
+    int get_refund( int amount ) {
+        delegate_only();
 
-    for ( int i = 0; i < amount; ++ i ) {
-        if ( external_tasks.empty() ) {
-            return i;
+        for ( int i = 0; i < amount; ++ i ) {
+            if ( external_tasks.empty() ) {
+                return i;
+            }
+
+            // This will eventually get the tasks to execute.
+            prepare_ressources( external_tasks.front() ) ;
+            external_tasks.pop_front();
         }
 
-        // This will eventually get the tasks to execute.
-        prepare_ressources( external_tasks.front() ) ;
-        external_tasks.pop_front();
+        return amount;
     }
-
-    return amount;
-}
 
 
 
@@ -145,8 +157,8 @@ int get_refund( int amount ) {
 };
 
 struct TDec {
-    struct frame_struct * target;
-    void * related;
+    struct frame_struct * page;
+    void * ref;
 };
 
 struct DWrite {
@@ -154,9 +166,16 @@ struct DWrite {
     void * frame;
     void * pos;
     size_t len;
+    DWrite(_o,_f,_p,_l) :
+        object(_o),frame(_f),pos(_p),len(_l) {}
+
 };
+
+
+__thread ExecutionUnit * local_execution_unit = NULL;
 typedef std::multimap<PtrType, DWrite> DWriteMap;
 typedef std::multimap<PtrType, TDec> TDecMap;
+typedef std::list<struct frame_struct*> CreatedFramesList;
 class ExecutionUnit {
 
 
@@ -164,17 +183,18 @@ class ExecutionUnit {
     // Ressource -> writes.
     DWriteMap writes_by_ressource;
     TDecMap tdecs_by_ressource;
+    CreatedFramesList created_frames_list;
 
 
-    void executor( struct frame_struct * page ) {
-	current_cfp = page;
+    static void executor( struct frame_struct * page ) {
+        local_execution_unit->current_cfp = page;
 	if ( ! PAGE_VALID( page ) ) {
             FATAL( "Execution of invalid page" );
 	}
 
-	before_code();
-	page->static_data->code();
-	after_code();
+        local_execution_unit->before_code();
+        page->static_data->fn();
+        local_execution_unit->after_code();
 	
 
     }
@@ -182,13 +202,14 @@ class ExecutionUnit {
     void tdec( struct frame_struct * page, void * ref ) {
         CFATAL( ref==NULL, "Unreferenced tdecs unsupported.");
 	struct TDec mytdec = {page,ref};
-	tdecs_list.push_front(mytdec);
+        tdecs_by_ressource.insert( TDecMap::value_type(ref,mytdec) );
     }
 
 
     void register_write( void * object, void * frame, void * pos, size_t len ) {
-        FATAL("NOT IMPLEMENTED");
-
+        void * k = object!=NULL?object:frame;
+        struct DWrite w = {object,frame,pos,len};
+        writes_by_ressource.insert( DWriteMap::value_type(k,w));
     }
 
     void process_commits() {
@@ -248,7 +269,7 @@ class ExecutionUnit {
             Closure * dotdecs = new_Closure( 1,// Because only one frame or object
                    {
                 for ( auto i = frame_tdecs->begin();
-                      i != frame_tdecs->end; ++ i ) {
+                      i != frame_tdecs->end(); ++ i ) {
                         ask_or_do_tdec(i->page);
                 }
                 delete frame_tdecs;
@@ -275,7 +296,9 @@ class ExecutionUnit {
             if ( i->ref != NULL ) {
                 FATAL( "Non null tdec reference associated with unknown frame.");
             }
-            // Anonymous TDecs
+            // Anonymous TDecs : not implemented.
+            // - one option is to make them depend on nothing.
+            // - another is to make them depend on everything.
             FATAL( "Anonymous tdecs unsupported");
             ask_or_do_tdec(i->page);
         }
@@ -285,12 +308,42 @@ class ExecutionUnit {
     }
 
 
+    bool check_ressources() {
+        // Check all ressources
+        for ( int i = 0; i < current_cfp->static_data->nargs;
+              ++i ) {
+            switch( current_cfp->static_data->arg_types[i] ) {
+                case R_FRAME_TYPE:
+                    // no need to check because data is new
+                    // enough by construction.
+                    break;
+                case RW_FRAME_TYPE:
+                    // Need to check if data is in RESP mode and has
+                    // a good usecount
+                    CFATAL( ! PAGE_IS_RESP(current_cfp->args[i]), "RW frames has no resp on requested frame." );
+                    break;
+                case W_FRAME_TYPE:
+                    CFATAL( ! PAGE_IS_TRANSIENT( current_cfp->args[i]), "WONLY frame didn't reserve frame for WONLY.");
+                    break;
+                case FATP_TYPE:
+                    FATAL( "TODO");
+                    break;
+
+
+            }
+        }
+    }
+
+
     static void before_code() {
+        // Check ressources availability.
 
     }
 
     static void after_code() {
-
+        // Process commits.
+        // and/or free zones written.
+        // Process fat pointers refecence counters.
     }
 
 };

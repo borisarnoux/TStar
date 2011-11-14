@@ -14,6 +14,8 @@ void acquire_rec( fat_pointer_p ptr, Closure * t );
 void release_rec( fat_pointer_p ptr );
 void register_for_data_arrival( PageType page, Closure * c );
 void register_for_write_arrival( PageType page, Closure * c );
+void request_page_data( PageType page );
+void request_page_resp( PageType page );
 
 #endif
 
