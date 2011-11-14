@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <identifiers.h>
 
+#include <tstariface.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,6 +36,7 @@ extern "C" {
 #define IS_TRANSIENT( fh ) ((fh)->proto_status == TRANSIENT )
 
 #define HAS_ZERO_COUNT(fh) ((fh)->usecount == 0)
+#define PAGE_IS_TRANSIENT( page ) IS_TRANSIENT( GET_FHEADER(page))
 
 #define PAGE_IS_AVAILABLE( page ) IS_AVAILABLE( GET_FHEADER( page ) )
 #define PAGE_IS_VALID( page ) IS_VALID( GET_FHEADER(page) )
@@ -55,18 +58,6 @@ struct owm_frame_layout {
 	char data[]; 
 };
 
-
-struct frame_struct {
-  struct static_data * static_data;
-  long sc;
-  void* args[];
-};
-
-struct static_data {
-  void (*fn)();
-  int nargs;
-  long arg_types[];
-};
 
 
 

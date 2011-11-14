@@ -13,7 +13,7 @@
 
 extern __thread int  delegator_flag;
 
-void delegator_only() {
+static inline void delegator_only() {
   CFATAL( delegator_flag == 0, "Delegator only function called outside delegator");
 }
 

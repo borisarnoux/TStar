@@ -4,7 +4,7 @@
 #include <string.h>
 #include<stdlib.h>
 
-int hashint(int key) {
+static inline int hashint(int key) {
   int c2=0x27d4eb2d; // a prime or an odd constant
   key = (key ^ 61) ^ (key >> 16);
   key = key + (key << 3);
@@ -15,7 +15,7 @@ int hashint(int key) {
 }
 
 
-int hashzone( void * _z, size_t size) {
+static inline int hashzone( void * _z, size_t size) {
   char * z = (char*) _z;
   int r = 0;
 

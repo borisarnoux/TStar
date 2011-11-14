@@ -1,5 +1,5 @@
 #include "mpi.h"
-
+#include <identifiers.h>
 
 // Routable messages have orig and are forwarded.
 enum MessageTypes {
@@ -51,6 +51,7 @@ public:
     }
 
     void init( int* argc, char *** argv );
+    void finalize();
 
     bool receive( MessageHdr &m );
 
@@ -60,7 +61,7 @@ public:
     }
 };
 
-class NetworkInterface : protected NetworkLowLevel {
+class NetworkInterface : public NetworkLowLevel {
 
   private:
     void (* message_type_table[100] )(MessageHdr &);

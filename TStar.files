@@ -27,3 +27,7 @@ src/tests/test.c
 src/tests/test_mapper.c
 src/scheduler.hpp
 src/TODO.txt
+src/main.h
+src/main.cpp
+src/tstariface.h
+src/tstariface.cpp

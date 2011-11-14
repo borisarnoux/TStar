@@ -1,5 +1,3 @@
-
-
 #include <fat_pointers.hpp>
 #include <network.hpp>
 
@@ -10,6 +8,7 @@
 #include <mappable_event.hpp>
 #include <map>
 
+#include <omp.h>
 #include <invalidation.hpp>
 
 typedef void * PageType;
@@ -94,15 +93,22 @@ void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
   }
   // TODO
 
+
 }
 
 void ask_or_do_invalidation_then(  void * page, Closure * c ) {
+  // Note c == null means no register closure.
+  FATAL("Not implemented !!");
   if ( PAGE_IS_RESP( page ) ) {
 	//invalidate_and_do();
+        // Register closure in invalidate and do.
   } else {
-	
+        // Send message.
+        // Register closure for invaldiate and do.
 
-  //TODO
+
+
+
   }
 
   
@@ -165,4 +171,5 @@ void invalidate_and_do ( void * page, Closure * c ) {
   
 
 }
+
 

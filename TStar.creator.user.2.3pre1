@@ -2,7 +2,7 @@
 <qtcreator>
  <data>
   <variable>GenericProjectManager.GenericProject.Toolchain</variable>
-  <value type="QString">ProjectExplorer.ToolChain.Gcc:/usr/bin/g++.x86-linux-generic-elf-64bit.</value>
+  <value type="QString">ProjectExplorer.ToolChain.Gcc:/usr/bin/g++.x86-linux-generic-elf-32bit.</value>
  </data>
  <data>
   <variable>ProjectExplorer.Project.ActiveTarget</variable>
@@ -42,10 +42,20 @@
    <value key="ProjectExplorer.Target.ActiveDeployConfiguration" type="int">0</value>
    <value key="ProjectExplorer.Target.ActiveRunConfiguration" type="int">0</value>
    <valuemap key="ProjectExplorer.Target.BuildConfiguration.0" type="QVariantMap">
-    <value key="GenericProjectManager.GenericBuildConfiguration.BuildDirectory" type="QString">/home/boris/Bacasable/TStar/src</value>
+    <value key="GenericProjectManager.GenericBuildConfiguration.BuildDirectory" type="QString">/home/boris/bacasable/Tstar/src</value>
     <value key="ProjectExplorer.BuildCOnfiguration.ToolChain" type="QString">INVALID</value>
     <valuemap key="ProjectExplorer.BuildConfiguration.BuildStepList.0" type="QVariantMap">
      <valuemap key="ProjectExplorer.BuildStepList.Step.0" type="QVariantMap">
+      <valuelist key="GenericProjectManager.GenericMakeStep.BuildTargets" type="QVariantList">
+       <value type="QString">clean</value>
+      </valuelist>
+      <value key="GenericProjectManager.GenericMakeStep.MakeArguments" type="QString"></value>
+      <value key="GenericProjectManager.GenericMakeStep.MakeCommand" type="QString"></value>
+      <value key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName" type="QString">Make</value>
+      <value key="ProjectExplorer.ProjectConfiguration.DisplayName" type="QString"></value>
+      <value key="ProjectExplorer.ProjectConfiguration.Id" type="QString">GenericProjectManager.GenericMakeStep</value>
+     </valuemap>
+     <valuemap key="ProjectExplorer.BuildStepList.Step.1" type="QVariantMap">
       <valuelist key="GenericProjectManager.GenericMakeStep.BuildTargets" type="QVariantList">
        <value type="QString">all</value>
       </valuelist>
@@ -55,7 +65,7 @@
       <value key="ProjectExplorer.ProjectConfiguration.DisplayName" type="QString"></value>
       <value key="ProjectExplorer.ProjectConfiguration.Id" type="QString">GenericProjectManager.GenericMakeStep</value>
      </valuemap>
-     <value key="ProjectExplorer.BuildStepList.StepsCount" type="int">1</value>
+     <value key="ProjectExplorer.BuildStepList.StepsCount" type="int">2</value>
      <value key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName" type="QString">Build</value>
      <value key="ProjectExplorer.ProjectConfiguration.DisplayName" type="QString"></value>
      <value key="ProjectExplorer.ProjectConfiguration.Id" type="QString">ProjectExplorer.BuildSteps.Build</value>
@@ -133,7 +143,7 @@
  </data>
  <data>
   <variable>ProjectExplorer.Project.Updater.EnvironmentId</variable>
-  <value type="QString">{28a6efb2-a3a3-49ce-9a40-18a36f1ecefe}</value>
+  <value type="QString">{3cbe5553-0a6b-4bef-96bc-d87e4015af4c}</value>
  </data>
  <data>
   <variable>ProjectExplorer.Project.Updater.FileVersion</variable>

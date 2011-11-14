@@ -1,6 +1,6 @@
 #include <fat_pointers.hpp>
-
-
+#include <owm_mem.hpp>
+#include <misc.h>
 
 void append_page_to_fatp( void * page, int perms, fat_pointer_p fatp ) {
   CFATAL( !PAGE_IS_RESP( fatp ), "Should be resp to create fatp structure") ;

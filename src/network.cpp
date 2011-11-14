@@ -79,6 +79,11 @@ void NetworkLowLevel::init( int* argc, char *** argv ) {
       MPI_Comm_size(MPI_COMM_WORLD, &num_nodes ); 
 }
 
+void NetworkLowLevel::finalize() {
+    MPI_Finalize();
+
+}
+
 bool NetworkLowLevel::receive( MessageHdr &m ) {
       MPI_Status s;
       int flag = 0;

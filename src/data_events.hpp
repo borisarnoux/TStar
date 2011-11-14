@@ -16,7 +16,7 @@ void register_for_data_arrival( PageType page, Closure * c );
 void register_for_write_arrival( PageType page, Closure * c );
 void request_page_data( PageType page );
 void request_page_resp( PageType page );
-
+void ask_or_do_tdec( void * page );
 #endif
 
 

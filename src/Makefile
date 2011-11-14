@@ -13,11 +13,14 @@ all : exec
 	
 
 exec : $(O_FILES)
-	mpic++ -o $@ $^
+	mpic++ -fopenmp -o $@ $^
 
 %.o : %.cpp
-	mpic++ -c -o $@ $^ -std=c++0x -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused
+	mpic++ -c -o $@ $^ -std=c++0x -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused 
 
 %.o : %.c 
 	gcc -c -o $@ $^ -std=gnu99 -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused
 
+
+clean :
+	rm -rf exec *.o
