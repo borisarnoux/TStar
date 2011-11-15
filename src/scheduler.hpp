@@ -34,7 +34,7 @@ struct DWrite {
 
 
 typedef std::multimap<PageType, DWrite> DWriteMap;
-typedef std::multimap<PageType, TDec> TDecMap;
+typedef std::multimap<PageType, PageType> TDecMap;
 typedef std::list<struct frame_struct*> CreatedFramesList;
 
 class ExecutionUnit {

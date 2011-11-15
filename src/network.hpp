@@ -19,9 +19,10 @@ enum MessageTypes {
   DoInvalidateType, // From Resp.
   AckInvalidateType,
 
-  TDecType // Routable
+  TDecType, // Routable
 
-
+ /* For debug */
+  TransPtrType
 };
 
 
@@ -65,7 +66,8 @@ class NetworkInterface : public NetworkLowLevel {
 
   private:
     void (* message_type_table[100] )(MessageHdr &);
-
+    static void * dbg_ptr_holder;
+    static int dbg_ptr_signal;
   public:
 
     NetworkInterface();
@@ -116,6 +118,13 @@ class NetworkInterface : public NetworkLowLevel {
     static void send_resp_req( node_id_t target, void * page );
 
     static void send_tdec( node_id_t target, void * page, int val );
+
+
+
+    static void dbg_send_ptr( node_id_t target, void * ptr );
+    void dbg_get_ptr( void ** ptrp );
+    static void onTransPtr(MessageHdr &msg);
+
 };
 
 

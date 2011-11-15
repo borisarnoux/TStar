@@ -70,6 +70,9 @@ struct TDec {
   void * page;
 };
 
+struct TransPtr {
+    void * ptr;
+};
 
 
 
@@ -112,7 +115,8 @@ bool NetworkLowLevel::receive( MessageHdr &m ) {
 
 
 
-
+void * NetworkInterface::dbg_ptr_holder;
+int NetworkInterface::dbg_ptr_signal;
 
 NetworkInterface::NetworkInterface() : NetworkLowLevel() {
 #define BIND_MT( id ) message_type_table[id##Type] = &on##id
@@ -127,6 +131,8 @@ NetworkInterface::NetworkInterface() : NetworkLowLevel() {
       BIND_MT( RWReq );
       BIND_MT( GoTransitive );
       BIND_MT( RespTransfer );
+      /* For debugging purposes */
+      BIND_MT( TransPtr );
 
 #undef BIND_MT
 }
@@ -139,9 +145,10 @@ void NetworkInterface::process_messages() {
         }
 
         message_type_table[ m.type ] ( m );
+        delete[] (char *)m.data; //Frees the message after processing.
+
       } 
 
-      delete[] (char *)m.data; //Frees the message after processing.
 } 
 
 
@@ -149,6 +156,7 @@ void NetworkInterface::process_messages() {
 // Forwarding :
 
 void NetworkInterface::forward( MessageHdr &m, node_id_t target ) {
+    DEBUG( "Forwarding message");
       m.to = target;
       m.from = get_node_num();
       send( m );
@@ -157,11 +165,12 @@ void NetworkInterface::forward( MessageHdr &m, node_id_t target ) {
 // Actual handlers
 void NetworkInterface::onDataMessage( MessageHdr &m ) {
       // No transitive writers :
+
       DataMessage & drm = *(DataMessage*)m.data;
 
       struct owm_frame_layout *fheader = 
-        (struct owm_frame_layout*) drm.page;
-
+                  GET_FHEADER(drm.page);
+      DEBUG( "Received data message : %p, size : %d", drm.page, drm.size);
 
         fheader->size = drm.size;
 
@@ -172,9 +181,12 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
 
         // Finally copy :
         memcpy( drm.page, drm.data, drm.size );
-
+        // Make it valid :
+        VALIDATE( fheader );
+        DEBUG( "Data copied");
         // Signal data arrived :
         signal_data_arrival( drm.page );
+        DEBUG( "Data arrived and signaled : %p, size %d", drm.page, drm.size);
 }
 
 void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
@@ -188,11 +200,16 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
           return;
         }
 
+        DEBUG( "DataReqMessage Received : page %p from %d", drm.page, drm.orig );
 
         // Build an answer.
         DataMessage & resp = *((DataMessage*) new char[sizeof(DataMessage) +fheader->size] );
-
+        DEBUG( "Answer size for data for page %p is %lu", drm.page, (long unsigned int )(sizeof(DataMessage) + fheader->size) );
         resp.size = fheader->size;
+        resp.page = drm.page;
+
+
+        DEBUG( "Responding to message ");
         memcpy( resp.data, drm.page, fheader->size );
 
         // Send it :
@@ -203,8 +220,9 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         resphdr.data = &resp;
         resphdr.data_size = sizeof(DataMessage) + fheader->size;
 
-        send( resphdr );
 
+        send( resphdr );
+        DEBUG( "Answer sent.");
         // TODO : replace with smart pointer...
         delete &resp;
         // Then add the recipient to the shared list of nodes :
@@ -350,10 +368,12 @@ void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         DoInvalidate &di = *(DoInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( di.page );
 
+        DEBUG( "Received DoInvalidate(%p)", di.page);
         CFATAL( IS_RESP( fheader), "Cannot invalidate RESP" );
         CFATAL( IS_TRANSIENT( fheader ), "No transitive message should be received");
 
         INVALIDATE( fheader );
+
 
         // Respond do invalidate.
         AckInvalidate ackinvalidate;
@@ -373,7 +393,7 @@ void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
 void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
         AckInvalidate &acki = *(AckInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( acki.page );
-
+        DEBUG( "Receiving AckInvalidate(%p)", acki.page);
         if ( !IS_RESP( fheader ) ) {
           // Then resp is the sender :
           //CFATAL( ! fheader->initialized, "Unitinialized data shouldn't receive InvalidateAck");
@@ -446,6 +466,7 @@ void NetworkInterface::send_do_invalidate( node_id_t target,  PageType page ) {
 void NetworkInterface::send_ask_invalidate( node_id_t target, PageType page ) {
         AskInvalidate ai;
         ai.page = page;
+        ai.orig = get_node_num();
         
         MessageHdr m;
         m.from = get_node_num();
@@ -503,6 +524,35 @@ void NetworkInterface::send_tdec( node_id_t target, void * page, int val ) {
         send( m );
 
 }
+
+void NetworkInterface::onTransPtr(MessageHdr &msg) {
+    dbg_ptr_holder = ((TransPtr*)msg.data)->ptr;
+    dbg_ptr_signal = 1;
+}
+
+void NetworkInterface::dbg_get_ptr( void ** ptrp ) {
+    while ( !dbg_ptr_signal ) {
+        process_messages();
+    }
+    dbg_ptr_signal = 0;
+    if ( ptrp != NULL ) *ptrp = dbg_ptr_holder;
+
+}
+
+void NetworkInterface::dbg_send_ptr( node_id_t target, void * ptr ) {
+    TransPtr tp;
+    tp.ptr = ptr;
+    MessageHdr msg;
+    msg.data = &tp;
+    msg.from = get_node_num();
+    msg.to = target;
+    msg.type = TransPtrType;
+    msg.data_size = sizeof( TransPtr);
+
+    send( msg );
+}
+
+
 
 
 

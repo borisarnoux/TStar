@@ -16,10 +16,10 @@ exec : $(O_FILES)
 	mpic++ -fopenmp -o $@ $^
 
 %.o : %.cpp
-	mpic++ -c -o $@ $^ -std=c++0x -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused 
+	mpic++ -c $(MAKEOPTS) -o $@ $^ -std=c++0x -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused 
 
 %.o : %.c 
-	gcc -c -o $@ $^ -std=gnu99 -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused
+	gcc -c -o $(MAKEOPTS) $@ $^ -std=gnu99 -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused
 
 
 clean :

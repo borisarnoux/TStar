@@ -3,6 +3,7 @@
 
 #include <string.h>
 #include<stdlib.h>
+#include <stdio.h>
 
 static inline int hashint(int key) {
   int c2=0x27d4eb2d; // a prime or an odd constant
@@ -34,6 +35,11 @@ static inline int hashzone( void * _z, size_t size) {
     r = hashint( r );
   }
 
+  if ( r < 0 ) {
+      fprintf( stderr,
+      "Negative hash value.");
+      exit( EXIT_FAILURE);
+  }
   return r;
   
 }

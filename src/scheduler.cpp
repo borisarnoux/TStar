@@ -10,30 +10,17 @@
 
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
-struct TDec {
-    struct frame_struct * page;
-    void * ref;
-};
 
-struct DWrite {
-    void * obj;
-    void * frame;
-    void * pos;
-    size_t len;
-    DWrite(void * _o, void * _f, void * _p, size_t _l) :
-        obj(_o),frame(_f),pos(_p),len(_l) {}
-
-};
 
 
 
 
 
 typedef std::multimap<PageType, DWrite> DWriteMap;
-typedef std::multimap<PageType, TDec> TDecMap;
+typedef std::multimap<PageType, PageType> TDecMap;
 typedef std::list<struct frame_struct*> CreatedFramesList;
 
-static void ExecutionUnit::executor( struct frame_struct * page ) {
+void ExecutionUnit::executor( struct frame_struct * page ) {
     local_execution_unit->current_cfp = page;
     if ( ! PAGE_IS_VALID( page ) ) {
         // This, while not being strictly speaking a mistake, shouldn't happen.
@@ -49,8 +36,7 @@ static void ExecutionUnit::executor( struct frame_struct * page ) {
 
 void ExecutionUnit::tdec( struct frame_struct * page, void * ref ) {
     CFATAL( ref==NULL, "Unreferenced tdecs unsupported.");
-    struct TDec mytdec = {page,ref};
-    tdecs_by_ressource.insert( TDecMap::value_type(ref,mytdec) );
+    tdecs_by_ressource.insert( TDecMap::value_type(ref,page) );
 }
 
 
@@ -92,7 +78,7 @@ void ExecutionUnit::process_commits() {
                   i != tdec_range.second;
                   ++i ) {
 
-                ask_or_do_tdec(i->second.page);
+                ask_or_do_tdec(i->second);
             }
             // And remove from map.
             tdecs_by_ressource.erase(tdec_range.first,tdec_range.second);
@@ -106,7 +92,7 @@ void ExecutionUnit::process_commits() {
         std::pair<TDecMap::iterator,TDecMap::iterator>
                 tdec_range = tdecs_by_ressource.equal_range(current_value);
         // Build a list of tdecs to do :
-        std::list<TDec> * frame_tdecs = new std::list<TDec>();
+        std::list<PageType> * frame_tdecs = new std::list<PageType>();
         for ( auto i = tdec_range.first; i != tdec_range.second; ++i ) {
             frame_tdecs->insert(frame_tdecs->begin(), i->second );
         }
@@ -118,7 +104,7 @@ void ExecutionUnit::process_commits() {
         {
         for ( auto i = frame_tdecs->begin();
                         i != frame_tdecs->end(); ++ i ) {
-                        ask_or_do_tdec(i->page);
+                        ask_or_do_tdec(*i);
         }
         delete frame_tdecs;} );
 
@@ -136,14 +122,14 @@ void ExecutionUnit::process_commits() {
     CFATAL( !writes_by_ressource.empty(), "A write was associated with an unknown argument (check frame/objects)");
     // If there are TDecs left, it is ok:
     for ( auto i = tdecs_by_ressource.begin(); i!= tdecs_by_ressource.end();++i) {
-        if ( i->second.ref != NULL ) {
+        if ( i->first != NULL ) {
             FATAL( "Non null tdec reference associated with unknown frame.");
         }
         // Anonymous TDecs : not implemented.
         // - one option is to make them depend on nothing.
         // - another is to make them depend on everything.
         FATAL( "Anonymous tdecs unsupported");
-        ask_or_do_tdec(i->second.page);
+        ask_or_do_tdec(i->second);
     }
 
 
@@ -175,21 +161,23 @@ bool ExecutionUnit::check_ressources() {
 
         }
     }
+    return true;
 }
 
 
-static void ExecutionUnit::before_code() {
+void ExecutionUnit::before_code() {
     // Check ressources availability.
 
 }
 
-static void ExecutionUnit::after_code() {
+void ExecutionUnit::after_code() {
     // Process commits.
     // and/or free zones written.
     // Process fat pointers refecence counters.
 }
 
 
+__thread ExecutionUnit * ExecutionUnit::local_execution_unit;
 
 
 // This is the entry point, should be attained when SC reaches 0.
@@ -327,7 +315,7 @@ for ( int i = 0; i < page->static_data->nargs; ++ i ) {
 
 
 // This yields to the inner scheduler.
-static void Scheduler::schedule_inner( struct frame_struct * page ) {
+void Scheduler::schedule_inner( struct frame_struct * page ) {
 #pragma omp task
     ExecutionUnit::executor( page );
 }

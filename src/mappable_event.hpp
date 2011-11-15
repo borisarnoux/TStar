@@ -41,7 +41,7 @@ public:
 
 
    void register_evt( KeyType k, Closure * t ) {
-      int idx = hashzone(&k,sizeof(k));
+      int idx = hashzone(&k,sizeof(k))%mapsn;
       ScopedLock scpl( mutexes[ idx ] );
 
 
@@ -50,11 +50,9 @@ public:
    }
 
    void signal_evt( KeyType k ) {
-      int idx = hashzone(&k,sizeof(k));
+      int idx = hashzone(&k,sizeof(k))%mapsn;
 
-      // TODO : Generic but only works when packed....
-      int lock_index = hashzone(&k,sizeof(k));
-      ScopedLock scpl( mutexes[ hashzone(&k, sizeof(KeyType)) ] );
+      ScopedLock scpl( mutexes[ idx ] );
       
 
       

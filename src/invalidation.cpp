@@ -10,6 +10,8 @@
 
 #include <omp.h>
 #include <invalidation.hpp>
+#include <mapper.h>
+
 
 typedef void * PageType;
 typedef std::multimap<PageType,node_id_t> RespSharedMap;
@@ -96,19 +98,20 @@ void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
 
 }
 
+
 void ask_or_do_invalidation_then(  void * page, Closure * c ) {
   // Note c == null means no register closure.
-  FATAL("Not implemented !!");
+
   if ( PAGE_IS_RESP( page ) ) {
-	//invalidate_and_do();
-        // Register closure in invalidate and do.
+      // Register closure in invalidate and do.
+      DEBUG( "Performing invalidation for %p", page);
+      invalidate_and_do(page, c);
   } else {
         // Send message.
-        // Register closure for invaldiate and do.
-
-
-
-
+        // Register closure for invalidation arrival.
+      DEBUG( "Sending invalidation for %p", page);
+        register_forinvalidateack(page, c);
+        NetworkInterface::send_ask_invalidate( mapper_who_owns(page), page);
   }
 
   
