@@ -7,6 +7,7 @@
 #include <frame.hpp>
 #include <misc.h>
 #include <owm_mem.hpp>
+#include <invalidation.hpp>
 
 #include <string.h>
 
@@ -95,13 +96,28 @@ int tstar_main_test2(int argc, char ** argv, struct frame_struct* first_task) {
                ni.process_messages();
 
            }
+
+           bool finished = 0;
+           bool *finishedp = &finished;
+
+           Closure * c = new_Closure( 1,
+           {    // Signal termination.
+                ni.dbg_send_ptr(0, NULL);
+                *finishedp = 1;
+             });
+
+           register_forinvalidateack(s, c);
+
            ask_or_do_invalidation_then(s,NULL);
 
            while ( PAGE_IS_VALID(s) ) {
                ni.process_messages();
            }
-           // Signal termination.
-           ni.dbg_send_ptr(0, NULL);
+
+
+           while ( !finished ) {
+               ni.process_messages();
+           }
            printf( "Finished, success.\n");
 
        }

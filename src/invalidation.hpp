@@ -10,6 +10,7 @@
 void signal_invalidation_ack( PageType page );
 
 long long export_and_clear_shared_set( void * page );
+void register_forinvalidateack(  void * page, Closure * c );
 
 void register_copy_distribution( void * page, node_id_t nodeid );
 void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c );
