@@ -341,6 +341,10 @@ void NetworkInterface::onRespTransfer( MessageHdr &m ) {
         memcpy( fheader->data, rt.datamsg.data, rt.datamsg.size );
         // Set resp :
         RESPONSIBILIZE( fheader );
+        // Usecount is initialized to zero, it will grow with :
+        //  - Immediate increases at "acquire" phases
+        //  - Closure-triggered increases when write accessed is signaled.
+        fheader->usecount = 0;
 
         // Signal read and write data arrival :
         signal_data_arrival( rt.datamsg.page);

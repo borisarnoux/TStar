@@ -99,7 +99,7 @@ void ExecutionUnit::process_commits() {
         // Remove them from the ressource map.
         tdecs_by_ressource.erase(tdec_range.first,tdec_range.second);
 
-        // We create a continuation :
+        // We create a closure for managing the tdecs :
         Closure * dotdecs = new_Closure( 1,// Because only one frame or object
         {
         for ( auto i = frame_tdecs->begin();
@@ -196,55 +196,6 @@ void Scheduler::schedule_external( struct frame_struct * page ) {
 }
 
 
-void Scheduler::get_ressources_rec( fat_pointer_p fat, Closure * c ) {
-    // This function gets all the data from the fat pointer.
-
-    // It reschedules itself at page arrival if necessary.
-    if ( !PAGE_IS_AVAILABLE(fat) ) {
-        request_page_data(fat);
-        Closure * do_later = new_Closure( 1,
-        {   get_ressources_rec( fat, c ); });
-    register_for_data_arrival(fat, do_later);
-}
-
-// And programs tdec at ressources arrival.
-Closure * completionC = new_Closure( fat->use_count,
-{ c->tdec();}
-);
-
-for ( int i = 0; i < fat->use_count; ++ i ) {
-    switch( fat->elements[i].type ) {
-
-    case FATP_TYPE :
-        get_ressources_rec( (fat_pointer_p) fat->elements[i].page, completionC);
-        break;
-
-    case R_FRAME_TYPE :
-        if ( PAGE_IS_AVAILABLE(fat->elements[i].page) ) {
-            completionC->tdec();
-            break;
-        }
-        register_for_data_arrival(fat->elements[i].page,completionC);
-        break;
-
-    case RW_FRAME_TYPE :
-        if ( PAGE_IS_RESP(fat->elements[i].page ) ) {
-            completionC->tdec();
-            break;
-        }
-        register_for_write_arrival(fat->elements[i].page, completionC);
-        break;
-
-    case W_FRAME_TYPE:
-        FATAL(" W frame type in fatp is unavailable/unimplemented.");
-        break;
-
-    }
-
-}
-
-}
-
 // This function won't keep track of the task, will instead spawn local tasks to handle the ressources it needs (and thus hide latency)
 void Scheduler::prepare_ressources( struct frame_struct * page ) {
     // As a first step we need to analyze how this task accesses other pages.
@@ -252,64 +203,72 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
     // Finallly, the total number of sub-tasks we created is used as trigger level for the next step.
 
     delegator_only();
+
     int work_count = 0;
     if ( !PAGE_IS_AVAILABLE( page ) ) {
         // Then schedule itself for when its ready :p
-        auto todo = new_Closure( 1,
-        { prepare_ressources( page ); } );
+        auto todo = new_Closure( 1,{prepare_ressources( page );});
 
-    register_for_data_arrival( page, todo );
+        register_for_data_arrival( page, todo );
 
-    return;
+     return;
     }
-for ( int i = 0; i < page->static_data->nargs; ++ i ) {
-    if ( page->static_data->arg_types[i] == R_FRAME_TYPE
-         || page->static_data->arg_types[i] == RW_FRAME_TYPE
-         ||  page->static_data->arg_types[i] == FATP_TYPE ) {
-        if ( !PAGE_IS_AVAILABLE(page->args[i]) ) {
+    for ( int i = 0; i < page->static_data->nargs; ++ i ) {
+        if ( page->static_data->arg_types[i] == R_FRAME_TYPE ) {
+            if ( !PAGE_IS_AVAILABLE(page->args[i]) ) {
+                work_count += 1;
+            }
+
+        } else if ( page->static_data->arg_types[i] == RW_FRAME_TYPE ) {
+            if ( !PAGE_IS_RESP(page->args[i]) ) {
+                work_count += 1;
+            }
+        } else if ( page->static_data->arg_types[i] == FATP_TYPE ) {
             work_count += 1;
         }
+
+
+
     }
 
-    // Will be mapped once more for writing :
-    if (  page->static_data->arg_types[i] == RW_FRAME_TYPE ) {
-        if ( !PAGE_IS_RESP(page->args[i]) ) {
-            work_count += 1;
+
+    if ( work_count == 0 ) {
+        schedule_inner( page );
+        return;
+    }
+
+    auto gotoinnersched  = new_Closure( work_count,
+    {schedule_inner( page );}
+    );
+
+
+    // Recount work count for safety.
+    int recount_work = 0;
+    for ( int i = 0; i < page->static_data->nargs; ++ i ) {
+        if ( page->static_data->arg_types[i] == R_FRAME_TYPE ) {
+            if ( !PAGE_IS_AVAILABLE(page->args[i])) {
+                request_page_data(page->args[i]);
+                register_for_data_arrival( page->args[i], gotoinnersched );
+                recount_work += 1;
+            }
+        }
+
+        if (  page->static_data->arg_types[i] == RW_FRAME_TYPE ) {
+            if ( !PAGE_IS_RESP(page->args[i])) {
+                request_page_resp(page->args[i]);
+                register_for_write_arrival( page->args[i], gotoinnersched );
+                recount_work += 1;
+            }
+        }
+
+        if (   page->static_data->arg_types[i] == FATP_TYPE ) {
+
+            acquire_rec((fat_pointer_p) page->args[i], gotoinnersched );
+            recount_work += 1;
         }
     }
-}
 
-
-if ( work_count == 0 ) {
-    schedule_inner( page );
-    return;
-}
-
-auto gotoinnersched  = new_Closure( work_count,
-{schedule_inner( page );}
-);
-
-
-for ( int i = 0; i < page->static_data->nargs; ++ i ) {
-    if ( page->static_data->arg_types[i] == R_FRAME_TYPE ) {
-        if ( !PAGE_IS_AVAILABLE(page->args[i])) {
-            request_page_data(page->args[i]);
-            register_for_data_arrival( page->args[i], gotoinnersched );
-
-        }
-    }
-
-    if (  page->static_data->arg_types[i] == RW_FRAME_TYPE ) {
-        request_page_resp(page->args[i]);
-        register_for_data_arrival( page->args[i], gotoinnersched);
-        register_for_write_arrival( page->args[i], gotoinnersched );
-    }
-
-    if (   page->static_data->arg_types[i] == FATP_TYPE ) {
-
-        get_ressources_rec((fat_pointer_p) page->args[i], gotoinnersched );
-    }
-}
+    CFATAL( recount_work != work_count, "Memroy frame state modified during prepare_ressources.");
 
 }
 

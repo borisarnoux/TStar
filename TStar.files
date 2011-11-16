@@ -31,3 +31,4 @@ src/main.h
 src/main.cpp
 src/tstariface.h
 src/tstariface.cpp
+src/sigsegv.cpp

@@ -4,6 +4,11 @@
 
 void append_page_to_fatp( void * page, int perms, fat_pointer_p fatp ) {
   CFATAL( !PAGE_IS_RESP( fatp ), "Should be resp to create fatp structure") ;
+
+  ressource_desc r = {page, perms};
+  fatp->elements[faptp->use_count] =
+  fatp->use_count += 1;
+
 }
 
 fat_pointer_p create_fatp( size_t nelts ) {
@@ -23,8 +28,3 @@ void notify_fatp_transfer( fat_pointer_p fatp ) {
   // Effect : smart_count ++;
 }
 
-void fatp_recursive_cleanup( fat_pointer_p fatp ) {
-  // Executes actual dec and  cleanup if 0 locally.
-  // Or sends a message for that.
-
-}

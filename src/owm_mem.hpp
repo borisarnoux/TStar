@@ -19,9 +19,10 @@ static inline void * owm_malloc( size_t size ) {
 }
 
 static inline void owm_free( void * page ) {
-        ask_or_do_invalidation_then( page, NULL); // serial == 0, NULL continuation
-	// Use continuation here ?
-	mapper_free( GET_FHEADER(page) );
+        // Error if not called locally.
+        CFATAL( mapper_who_owns(page) != get_node_num(), "Attempting to free pointer in a different location." );
+        ask_or_do_invalidation_then( page, NULL);
+        mapper_free( GET_FHEADER(page) );
 }
 
 

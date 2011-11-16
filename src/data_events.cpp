@@ -4,29 +4,31 @@
 #include <network.hpp>
 #include <mapper.h>
 
-// This is a task mapper for arriving reads.
-TaskMapper<PageType> write_arrived_mapper(2, "Write Arrived Mapper");
-TaskMapper<PageType> data_arrived_mapper(2, "Data Arrived Mapper");
-TaskMapper<PageType> usecount_zero_mapper(2, "Usecount zero Mapper");
-// This is a task mapper for arriving write commits: 
 struct commit_key_struct {
   bool operator<(const commit_key_struct &other) const {
-	if ( this->page == other.page ) {
-	  return this->serial < other.serial;
-	}
-	return this->page < other.page;
+        if ( this->page == other.page ) {
+          return this->serial < other.serial;
+        }
+        return this->page < other.page;
   }
-  
+
   bool operator==(const commit_key_struct &other) const {
-	return this->page == other.page && this->serial == other.serial;
-  	
+        return this->page == other.page && this->serial == other.serial;
+
   }
   serial_t serial;
-  PageType page;  
+  PageType page;
 } __attribute__((packed));
 
+// The data-related task mappers                   ( Map#, Name )
+TaskMapper<PageType>           write_arrived_mapper(2, "Write Arrived Mapper");
+TaskMapper<PageType>           data_arrived_mapper (2, "Data Arrived Mapper");
+TaskMapper<PageType>           usecount_zero_mapper(2, "Usecount zero Mapper");
+TaskMapper<commit_key_struct>  write_commit_mapper (2, "Write Commit");
 
-TaskMapper<commit_key_struct> write_commit_mapper(2, "Write Commit");
+
+
+
 
 
 void signal_usecount_zero( PageType page ) {
@@ -99,8 +101,7 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
   if ( !PAGE_IS_AVAILABLE(ptr)) {
      request_page_data(ptr);
      Closure * retry_c = new_Closure( 1,
-     {acquire_rec(ptr,t);}
-     );
+     {acquire_rec(ptr,t);});
      register_for_data_arrival(ptr, retry_c);
      return;
   }
@@ -146,9 +147,13 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
   for ( int i = 0; i < ptr->use_count; ++ i  ) {
         struct ressource_desc & r = ptr->elements[i];
         if ( r.perms == W_FRAME_TYPE )  {
-            // Nothing to do ? ( TODO : check and rethink carefully )
             // We will adjust the transient state
             // as well as the use count as late as possible.
+            // However, if the page is available for RW now :
+            if ( PAGE_IS_RESP (r.page)) {
+                owm_frame_layout * fheader = GET_FHEADER( r.page );
+                fheader->usecount += 1;
+            }
 
         } else if (r.perms == RW_FRAME_TYPE ) {
             // Awaiting RESP
@@ -156,6 +161,10 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
                 todo_recount += 1;
                 request_page_resp(r.page);
                 register_for_write_arrival(r.page, waiter);
+            } else {
+                // We need to increase the use count :
+                owm_frame_layout * fheader = GET_FHEADER( r.page );
+                fheader->usecount += 1;
             }
         } else if ( r.perms == FATP_TYPE ) {
             fat_pointer_p rfat = (fat_pointer_p) r.page;

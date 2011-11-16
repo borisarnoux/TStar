@@ -7,7 +7,6 @@
 
 
 struct ressource_desc {
-  int type;
   int perms;
   void * page;
 };
@@ -24,14 +23,11 @@ typedef struct fat_pointer_buffer * fat_pointer_p;
 
 
 
-
-
 fat_pointer_p create_fatp( size_t nelts );
 
 void append_fatp_to_fatp( fat_pointer_p , int perms, fat_pointer_p fatp );
 
 void notify_fatp_transfer( fat_pointer_p fatp );
-void fatp_recursive_cleanup( fat_pointer_p fatp );
 
 
 
