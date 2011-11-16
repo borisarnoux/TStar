@@ -53,7 +53,6 @@ struct owm_frame_layout {
 	size_t size; // Size of
         int usecount;
 	int proto_status; // Fresh, Invalid, TransientWriter, Responsible.
-	int version;      // In case of Invalid, version number of the last request.
 	node_id_t next_resp;
 	char data[]; 
 };

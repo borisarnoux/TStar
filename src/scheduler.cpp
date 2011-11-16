@@ -22,7 +22,7 @@ typedef std::list<struct frame_struct*> CreatedFramesList;
 
 void ExecutionUnit::executor( struct frame_struct * page ) {
     local_execution_unit->current_cfp = page;
-    if ( ! PAGE_IS_VALID( page ) ) {
+    if ( ! PAGE_IS_AVAILABLE( page ) ) {
         // This, while not being strictly speaking a mistake, shouldn't happen.
         FATAL( "Execution of invalid page" );
     }

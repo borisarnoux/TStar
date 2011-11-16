@@ -9,7 +9,8 @@
 #include <frame.hpp>
 // This is a C++ header.
 
-
+#include  <boost/thread/recursive_mutex.hpp>
+#include <boost/thread/locks.hpp>
 
 extern __thread int  delegator_flag;
 
@@ -70,17 +71,20 @@ Closure * new_Closure( int _sc, T * _lambda ) {
 
 
 
+typedef boost::recursive_mutex RecMutex;
+typedef boost::lock_guard<RecMutex> ScopedLock;
 
 class Delegator {
   std::list<Closure*> delegations;
   int occupied;
+  RecMutex recmutex;
 
 public :
   Delegator() : occupied(0) {}
 
   void delegate( Closure *c ) {
-	#pragma omp critical (delegator_crirical)
 	{
+          ScopedLock scl(recmutex);
 	  delegations.push_back( c );
 	}
 	
@@ -96,10 +100,14 @@ public :
 private:
 
   void do_delegations() {
-	while ( ! delegations.empty() ) {
+        while ( true ) {
 	  Closure * c = 0;
-  #pragma omp critical (delegator_critical)
 	  {
+                ScopedLock scl( recmutex );
+
+                if ( delegations.empty() ) {
+                    break;
+                }
 		c = delegations.front();
 		delegations.pop_front();
 	  }

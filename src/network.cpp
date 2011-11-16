@@ -119,6 +119,9 @@ void * NetworkInterface::dbg_ptr_holder;
 int NetworkInterface::dbg_ptr_signal;
 
 NetworkInterface::NetworkInterface() : NetworkLowLevel() {
+// This marco registers the handlers (following naming convention "onX")
+// with the types enum (convention XType), into a table for multiplexing
+// messages.
 #define BIND_MT( id ) message_type_table[id##Type] = &on##id
       BIND_MT( DataMessage );
       BIND_MT( DataReqMessage );
@@ -146,9 +149,7 @@ void NetworkInterface::process_messages() {
 
         message_type_table[ m.type ] ( m );
         delete[] (char *)m.data; //Frees the message after processing.
-
       } 
-
 } 
 
 
@@ -429,7 +430,8 @@ void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page ) {
           signal_invalidation_ack(  page );
           return;
 	  
-		}
+
+        }
 
 
         //  Or actually send the message.

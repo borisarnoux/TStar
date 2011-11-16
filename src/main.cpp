@@ -103,6 +103,7 @@ int tstar_main_test2(int argc, char ** argv, struct frame_struct* first_task) {
            Closure * c = new_Closure( 1,
            {    // Signal termination.
                 ni.dbg_send_ptr(0, NULL);
+                printf( "Reacting to invalidateAck");
                 *finishedp = 1;
              });
 

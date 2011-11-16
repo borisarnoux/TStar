@@ -24,7 +24,7 @@ typedef std::pair<RespSharedMap::iterator,RespSharedMap::iterator> RespSharedMap
 typedef RespSharedMap::value_type RespSharedMapElt;
 
 
-TaskMapper<PageType> invalidation_tm(2);
+TaskMapper<PageType> invalidation_tm(2, "Invalidation Mapper");
 
 // This multimap contains the nodes considering their copy of page
 // valid, by page. It should not contain any page the local node is
@@ -78,22 +78,57 @@ void register_forinvalidateack(  void * page, Closure * c ) {
 
 
 
-// This function sends an invalidation ack to a target node.
-// This refers to a specific write.
-// For making it easier to deal with special cases, whenever the target
-// to answer to is local it doesn't send anything but does what the
-// arrival of the message would have done.
-//  TODO : think about how not to write too much code here.
+
 
 
 void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
+  // Because p is a fat pointer,
+  // it is supposed to stay valid until this point.
+  CFATAL( !PAGE_IS_AVAILABLE(p), "Illegal invalid fat pointer.");
+
+
+  // Replace this model with one actually taking care of the writes
+  // To determine whether invalidation is necessary or not.
+  int count_todo = 0;
   for ( int i = 0; i < p->use_count; ++ i  ) {
-	struct ressource_desc & r = p->elements[i];
-	if ( r.perms == WO_PERM  || r.perms == RW_PERM ) {
-				
-	}
+        struct ressource_desc & r = p->elements[i];
+        if ( r.perms == W_FRAME_TYPE  || r.perms == RW_FRAME_TYPE ) {
+            // RW means we need to check for RESP acquired (or this is a bug )
+            CFATAL ( r.perms == RW_FRAME_TYPE && !PAGE_IS_RESP( r.page ),
+                     "Page requires RW perm, but RESP was not granted. FATAL " );
+            count_todo +=1;
+
+        } else if ( r.perms == FATP_TYPE ) {
+            // Recurse, we need to count it :
+            count_todo +=1;
+        } else if ( r.perms == R_FRAME_TYPE ) {
+            // Nothing to do.
+        } else {
+            FATAL( "Unknown ressources perm in fat pointer %p ", p);
+        }
   }
-  // TODO
+  // Before doing anything else, we must count operations to be done.
+  Closure * waiter = new_Closure(count_todo,
+  { c->tdec(); }
+  );
+
+
+  // We now link the work with this new task.
+  for ( int i = 0; i < p->use_count; ++ i  ) {
+       struct ressource_desc & r = p->elements[i];
+       if ( r.perms == W_FRAME_TYPE  || r.perms == RW_FRAME_TYPE ) {
+           ask_or_do_invalidation_then(r.page, waiter);
+
+       } else if ( r.perms == FATP_TYPE ) {
+           ask_or_do_invalidation_rec_then((fat_pointer_p)r.page, waiter);
+
+       } else if ( r.perms == R_FRAME_TYPE ) {
+           // Nothing to do.
+
+       } else {
+           FATAL( "Unknown ressources perm in fat pointer %p ", p);
+       }
+  }
 
 
 }
@@ -107,19 +142,24 @@ void ask_or_do_invalidation_then(  void * page, Closure * c ) {
       DEBUG( "Performing invalidation for %p", page);
       invalidate_and_do(page, c);
   } else {
-        // Send message.
-        // Register closure for invalidation arrival.
+      // Send message.
+      // Register closure for invalidation arrival.
       DEBUG( "Sending invalidation for %p", page);
-        register_forinvalidateack(page, c);
-        NetworkInterface::send_ask_invalidate( mapper_who_owns(page), page);
+
+      if ( c != NULL ) {
+          register_forinvalidateack(page, c);
+      }
+
+      NetworkInterface::send_ask_invalidate( mapper_who_owns(page), page);
   }
 
   
 }
 
 
-
+// This function answers a remote invalidation demand.
 void planify_invalidation( void *page, node_id_t client ) {
+  CFATAL ( ! PAGE_IS_RESP( page ), "planify invalidation is to be executed on RESP only." );
 
   // Then we add a closure which will respond to the client :
   auto continuer = new_Closure( 1,
@@ -132,11 +172,13 @@ void planify_invalidation( void *page, node_id_t client ) {
 }
 
 
+// Invalidate and do operates on RESP only : it takes care of sending
+// a do invalidate message to the members of the shared set.
+// When
 void invalidate_and_do ( void * page, Closure * c ) {
   
   // Check if page is RESP mode :
   //
-  CFATAL ( ! PAGE_IS_RESP( page ), "Wrong use of invalidate and do : go for ask version" );
   
   
   RespSharedMapRange range = resp_shared_map.equal_range(page);
@@ -152,6 +194,11 @@ void invalidate_and_do ( void * page, Closure * c ) {
     total_to_wait += 1;
 
     NetworkInterface::send_do_invalidate( target, page );
+  }
+
+  // The rest is for triggering in case of c!= NULL
+  if ( c == NULL ) {
+      return;
   }
 
   // We can avoid setting up :
