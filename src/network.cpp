@@ -208,6 +208,7 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         }
         if ( !IS_RESP( fheader )) {
           DEBUG( "Fheader fof req message : size :%d, next_resp : %d", (int)fheader->size, fheader->next_resp);
+          CFATAL(drm.orig == get_node_num(), "Forwarding loop.");
           forward( m, fheader->next_resp );
           return;
         }
@@ -248,8 +249,8 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
         RWrite & rwm = *(RWrite *) m.data;
         owm_frame_layout * fheader = GET_FHEADER( rwm.page );
         if ( ! IS_RESP( fheader ) ) {
+          CFATAL(rwm.orig == get_node_num(), "Forwarding loop.");
           forward( m, fheader->next_resp );
-
           return;
         }
 
@@ -288,6 +289,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
 
         // Check or forward.
         if ( ! IS_RESP( fheader ) ) {
+          CFATAL(rwrm.orig == get_node_num(), "Forwarding loop.");
           forward( m, fheader->next_resp );
           return;
         }
@@ -406,6 +408,7 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
         owm_frame_layout * fheader = GET_FHEADER( ai.page );
 
         if ( !IS_RESP( fheader )  ) {
+          CFATAL(ai.orig == get_node_num(), "Forwarding loop.");
           forward( m, fheader->next_resp );
           return;
         } 
@@ -461,6 +464,7 @@ void NetworkInterface::onTDec( MessageHdr &m ) {
 
         if ( ! IS_RESP( fheader ) ) {
           forward( m, fheader->next_resp );
+          return;
         }
 
         // Do Tdec :
