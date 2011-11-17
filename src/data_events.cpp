@@ -77,8 +77,9 @@ void request_page_resp( PageType page ) {
 
     // We need to increment use count here because a call to request_page_resp
     // corresponds to a user of the page in write mode.
+    owm_frame_layout * fheader = GET_FHEADER(page);
     Closure * incrementor = new_Closure( 1, {
-         GET_FHEADER(page)->usecount+=1;
+         fheader->usecount+=1;
      }
     );
 

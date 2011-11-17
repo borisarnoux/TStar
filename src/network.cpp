@@ -10,6 +10,8 @@
 #include <invalidation.hpp>
 #include <network.hpp>
 #include <data_events.hpp>
+#include <mapper.h>
+#include <owm_mem.hpp>
 
 struct DataMessage {
   void * page;
@@ -47,7 +49,7 @@ struct RespTransfer {
   DataMessage datamsg;
 };
 
-struct GoTransitive {
+struct GoTransient {
   void * page;
 };
 
@@ -102,10 +104,12 @@ bool NetworkLowLevel::receive( MessageHdr &m ) {
       m.to   = get_node_num();
       m.type = (MessageTypes) s.MPI_TAG;
       // Get size :
-	  
-      MPI_Get_count( &s, MPI_CHAR, (int*)&m.data_size );
+      int tmp_count = 0;
+      MPI_Get_count( &s, MPI_CHAR, &tmp_count );
+      m.data_size = tmp_count;
+      CFATAL(tmp_count<=0, "Negative or null message size");
       m.data = new char[m.data_size];
-
+      //DEBUG( "RCV MessageHdr Data buffer at : %p", m.data);
       MPI_Recv( m.data, m.data_size,
                  MPI_CHAR, s.MPI_SOURCE,
                  s.MPI_TAG, MPI_COMM_WORLD, NULL );
@@ -132,7 +136,7 @@ NetworkInterface::NetworkInterface() : NetworkLowLevel() {
       BIND_MT( RWrite );
       BIND_MT( RWriteAck );
       BIND_MT( RWReq );
-      BIND_MT( GoTransitive );
+      BIND_MT( GoTransient );
       BIND_MT( RespTransfer );
       /* For debugging purposes */
       BIND_MT( TransPtr );
@@ -171,7 +175,7 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
 
       struct owm_frame_layout *fheader = 
                   GET_FHEADER(drm.page);
-      DEBUG( "Received data message : %p, size : %d", drm.page, drm.size);
+      DEBUG( "Received data message : %p, size : %d", drm.page,(int)drm.size);
 
         fheader->size = drm.size;
 
@@ -187,7 +191,7 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
         DEBUG( "Data copied");
         // Signal data arrived :
         signal_data_arrival( drm.page );
-        DEBUG( "Data arrived and signaled : %p, size %d", drm.page, drm.size);
+        DEBUG( "Data arrived and signaled : %p, size %d", drm.page,(int)drm.size);
 }
 
 void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
@@ -196,7 +200,14 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
 
         owm_frame_layout *fheader = GET_FHEADER( drm.page );
 
+        if ( mapper_who_owns(drm.page) == get_node_num() ) {
+            // Owner must have correct canari values :
+            CFATAL( fheader->canari != CANARI || fheader->canari2 != CANARI,
+                    "Invalid canari values for page %p.",drm.page);
+
+        }
         if ( !IS_RESP( fheader )) {
+          DEBUG( "Fheader fof req message : size :%d, next_resp : %d", (int)fheader->size, fheader->next_resp);
           forward( m, fheader->next_resp );
           return;
         }
@@ -283,42 +294,65 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
 
         // If this page has no current writers :
         if ( HAS_ZERO_COUNT( fheader ) ) {
-          VALIDATE( fheader );
+            doRespTransfer(rwrm.page,rwrm.orig);
         } else {
 
-          // This shouldn't happen : (for now ) TODO
+          // We have to solve a RW race :
+          if ( fheader->reserved ) {
+              // Answers go transitive : means to retry
+              // later, and might mean actually transient
+              Closure * gotransientClosure = new_Closure(1,
+              {GoTransient gtresp;
+              gtresp.page = rwrm.page;
 
-          FATAL("RW Races forbidden");
+              MessageHdr resp;
+              resp.from = get_node_num();
+              resp.to = rwrm.orig;
+              resp.type = GoTransientType;
+              resp.data_size = sizeof( GoTransient);
+              resp.data = &gtresp;
 
-          // Answers go transitive
-          GoTransitive gtresp;
-          gtresp.page = rwrm.page;		
+              send( resp );} );
+              register_for_usecount_zero(rwrm.page, gotransientClosure);
+              return;
+          } else {
+            // We will transfer responsibility ASAP.
+            Closure * do_transfer = new_Closure (1,
+            {doRespTransfer(rwrm.page, rwrm.orig);});
+            register_for_usecount_zero(rwrm.page,do_transfer);
+            fheader->reserved = true;
+            return;
 
-          MessageHdr resp;
-          resp.from = get_node_num();
-          resp.to = rwrm.orig;
-          resp.type = GoTransitiveType;
-          resp.data_size = sizeof( GoTransitive);
-          resp.data = &gtresp;
-
-          send( resp );
-          // Nothing more to be done here.
-          return;
+          }
         }
+}
+
+void  NetworkInterface::doRespTransfer(PageType page,  node_id_t target ) {
+        owm_frame_layout * fheader = GET_FHEADER(page);
+
+        // Check status :
+        CFATAL( !PAGE_IS_RESP(page), "Attempting to transfer RESP of non RESP !!! ");
+        // Check for usecount :
+        CFATAL( fheader->usecount != 0, "Transferring non zero usecount page.");
+        // Set state to valid.
+        VALIDATE( fheader );
 
 
         // Transfers the responsibility :
-        fheader->next_resp = rwrm.orig;
+        fheader->next_resp = target;
         RespTransfer & resp_transfer = *( RespTransfer * ) new char[sizeof(RespTransfer)+fheader->size];
         resp_transfer.datamsg.size = fheader->size;
-        resp_transfer.shared_nodes_bitmap = export_and_clear_shared_set(rwrm.page);
-        resp_transfer.datamsg.page = rwrm.page;
+        resp_transfer.shared_nodes_bitmap = export_and_clear_shared_set(page);
+        // Because we consider ourselves as valid, bitmap contains local node :
+        resp_transfer.shared_nodes_bitmap &= 1<<get_node_num();
+
+        resp_transfer.datamsg.page = page;
         memcpy( resp_transfer.datamsg.data, fheader->data, fheader->size );
 
 
         MessageHdr resp_msg;
         resp_msg.from = get_node_num();
-        resp_msg.to = rwrm.orig;
+        resp_msg.to = target;
         resp_msg.type = RespTransferType;
         resp_msg.data = &resp_transfer;
         resp_msg.data_size = sizeof(RespTransfer) + fheader->size;
@@ -345,6 +379,7 @@ void NetworkInterface::onRespTransfer( MessageHdr &m ) {
         //  - Immediate increases at "acquire" phases
         //  - Closure-triggered increases when write accessed is signaled.
         fheader->usecount = 0;
+        fheader->reserved = false;
 
         // Signal read and write data arrival :
         signal_data_arrival( rt.datamsg.page);
@@ -352,7 +387,7 @@ void NetworkInterface::onRespTransfer( MessageHdr &m ) {
 
 }
 
-void NetworkInterface::onGoTransitive( MessageHdr &m ) {
+void NetworkInterface::onGoTransient( MessageHdr &m ) {
         FATAL( "Not yet supported" );
 }
 

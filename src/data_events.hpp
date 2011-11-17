@@ -6,6 +6,8 @@
 #include <mappable_event.hpp>
 #include <fat_pointers.hpp>
 
+void register_for_usecount_zero( PageType page, Closure * c );
+void signal_usecount_zero( PageType page );
 
 void signal_write_arrival( PageType page );
 void signal_write_commited( serial_t serial, PageType page);

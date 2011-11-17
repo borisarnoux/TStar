@@ -11,7 +11,13 @@
 
 #include <string.h>
 
-int total_nodes;
+#ifdef __x86_64
+#define ZONE_START 0x70ef55b44000
+#else
+#define ZONE_START 0x70000000
+#endif
+
+int total_nodes = 0;
 
 int tstar_main_test1(int argc, char ** argv, struct frame_struct* first_task) {
        // Create a network interface, embedding parameters ( here MPI )
@@ -59,8 +65,6 @@ int tstar_main_test1(int argc, char ** argv, struct frame_struct* first_task) {
        return 0;
 
 }
-
-
 int tstar_main_test2(int argc, char ** argv, struct frame_struct* first_task) {
        // Create a network interface, embedding parameters ( here MPI )
        NetworkInterface ni;
@@ -70,7 +74,7 @@ int tstar_main_test2(int argc, char ** argv, struct frame_struct* first_task) {
        total_nodes = ni.num_nodes;
 
        // Setup address space.
-       mapper_initialize_address_space((void*)0x07000000, 0x4000, total_nodes);
+       mapper_initialize_address_space((void*)ZONE_START, 0x4000, total_nodes);
 
        // Creates a scheduler :
        Scheduler s;
@@ -129,12 +133,104 @@ int tstar_main_test2(int argc, char ** argv, struct frame_struct* first_task) {
 
 }
 
-int main( int argc, char ** argv ) {
+int tstar_main_test3(int argc, char ** argv, struct frame_struct* first_task) {
+       // Create a network interface, embedding parameters ( here MPI )
+       NetworkInterface ni;
+       ni.init(&argc, &argv);
+       // Get the external infos.
+       my_node = ni.node_num;
+       total_nodes = ni.num_nodes;
+
+       // Setup address space.
+       mapper_initialize_address_space((void*)ZONE_START, 0x4000, total_nodes);
+
+       // Creates a scheduler :
+       Scheduler s;
+
+       if ( get_node_num() == 0 ) {
+           char * s = (char*) owm_malloc(40);
+           strcpy( s, "Toto");
+
+           CHECK_CANARIES(s);
+           owm_frame_layout * fheader = GET_FHEADER(s);
+           // Prepares for resp transfer.
+           fheader->usecount = 0;
+
+           ni.dbg_send_ptr(1, s);
+           DEBUG("Pointer sent, processing messages in loop.");
+
+           ni.dbg_get_ptr(NULL);
+
+
+       } else {
+           char *s = NULL;
+           DEBUG( "Getting pointer...");
+           ni.dbg_get_ptr((void**)&s);
+           DEBUG( "Got pointer from 0.");
+           ni.send_data_req(0,s);
+           DEBUG( "Data request message sent.");
+           while ( memcmp( s, "Toto", 4)) {
+               ni.process_messages();
+
+           }
+
+           bool finished = 0;
+           bool *finishedp = &finished;
+
+           Closure * c = new_Closure( 1,
+           {    // Signal termination.
+                printf( "Reacting to invalidateAck");
+                *finishedp = 1;
+             });
+
+           register_forinvalidateack(s, c);
+
+           ask_or_do_invalidation_then(s,NULL);
+
+           while ( PAGE_IS_VALID(s) ) {
+               ni.process_messages();
+           }
+
+
+           while ( !finished ) {
+               ni.process_messages();
+           }
+
+           bool is_resp = false;
+           bool *is_resp_p = &is_resp;
+           Closure * become_resp = new_Closure(1,
+                  {*is_resp_p = true;} );
+
+           request_page_resp(s);
+           register_for_write_arrival(s,become_resp);
+           while (!is_resp) {
+               ni.process_messages();
+           }
+           ni.dbg_send_ptr(0, NULL);
+
+
+           printf( "Finished, success.\n");
+
+       }
+
+       ni.finalize();
+
+       return 0;
+
+}
+
+
+
+       int main( int argc, char ** argv ) {
 #ifdef BUILD_TEST1
-    tstar_main_test1(argc, argv, NULL);
+           tstar_main_test1(argc, argv, NULL);
 #endif
 
 #ifdef BUILD_TEST2
-    tstar_main_test2(argc, argv, NULL );
+           tstar_main_test2(argc, argv, NULL );
 #endif
-}
+
+#ifdef BUILD_TEST3
+           tstar_main_test3(argc, argv, NULL );
+#endif
+       }

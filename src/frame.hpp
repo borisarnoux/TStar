@@ -46,16 +46,25 @@ extern "C" {
 
 
 #define GET_FHEADER( page ) ((struct owm_frame_layout*)((intptr_t)(page) - sizeof(struct owm_frame_layout)))
+#define CHECK_CANARIES( page ) \
+    do { struct owm_frame_layout * fheader = GET_FHEADER(page);\
+    CFATAL( fheader->canari != CANARI || fheader->canari2 != CANARI, "Wrong canaries for page %p", page );\
+} while (0)
 
+#define CANARI ((int)0xdeadbeef)
 
 
 struct owm_frame_layout {
+        int canari;
 	size_t size; // Size of
         int usecount;
 	int proto_status; // Fresh, Invalid, TransientWriter, Responsible.
 	node_id_t next_resp;
+        int reserved;
+        int canari2;
+
 	char data[]; 
-};
+} __attribute__((__packed__));
 
 
 

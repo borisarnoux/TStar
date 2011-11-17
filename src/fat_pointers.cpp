@@ -5,8 +5,8 @@
 void append_page_to_fatp( void * page, int perms, fat_pointer_p fatp ) {
   CFATAL( !PAGE_IS_RESP( fatp ), "Should be resp to create fatp structure") ;
 
-  ressource_desc r = {page, perms};
-  fatp->elements[faptp->use_count] =
+  ressource_desc r = {perms,page};
+  fatp->elements[fatp->use_count] = r;
   fatp->use_count += 1;
 
 }

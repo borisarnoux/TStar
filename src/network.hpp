@@ -9,7 +9,8 @@ enum MessageTypes {
 
   RWReqType, // Routable.
   RespTransferType, 
-  GoTransitiveType,  // Not implemented RW races yet (triggers error, TODO)
+  GoTransientType,  // Manages RW Races.
+        //For now, used for failure : future real conccurent writers ?
 
   RWriteType,
   RWriteAckType, // From Resp
@@ -91,11 +92,13 @@ class NetworkInterface : public NetworkLowLevel {
     static void onRWriteAck( MessageHdr &m );
 
     static void onRWReq( MessageHdr &m );
+    static void doRespTransfer(PageType page,  node_id_t target );
 
-	static void onRespTransfer( MessageHdr &m ) ;
+
+    static void onRespTransfer( MessageHdr &m ) ;
 
 
-    static void onGoTransitive( MessageHdr &m ) ;
+    static void onGoTransient( MessageHdr &m ) ;
 
     static void onAskInvalidate( MessageHdr &m );
 
