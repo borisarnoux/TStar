@@ -303,7 +303,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
               // Answers go transitive : means to retry
               // later, and might mean actually transient
               Closure * gotransientClosure = new_Closure(1,
-              {GoTransient gtresp;
+              GoTransient gtresp;
               gtresp.page = rwrm.page;
 
               MessageHdr resp;
@@ -313,7 +313,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
               resp.data_size = sizeof( GoTransient);
               resp.data = &gtresp;
 
-              send( resp );} );
+              send( resp ); );
               register_for_usecount_zero(rwrm.page, gotransientClosure);
               return;
           } else {
@@ -321,7 +321,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
             DEBUG( "Page %p reserved for %d", rwrm.page, rwrm.orig);
 
             Closure * do_transfer = new_Closure (1,
-            {doRespTransfer(rwrm.page, rwrm.orig);});
+            doRespTransfer(rwrm.page, rwrm.orig););
             register_for_usecount_zero(rwrm.page,do_transfer);
             fheader->reserved = true;
             return;

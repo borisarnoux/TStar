@@ -66,7 +66,7 @@ Closure * new_Closure( int _sc, T * _lambda ) {
 
 }
 
-#define new_Closure( counter, block ) new_Closure( counter,  new auto([=]() block ))
+#define new_Closure( counter, block ) new_Closure( counter,  new auto([=]() {block} ))
 #define DELEGATE( delegator, block ) (delegator).delegate( new_Closure( 1, block ) )
 
 
