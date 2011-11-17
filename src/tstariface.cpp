@@ -11,7 +11,7 @@ void tstar_tdec( void * target, void * reference ) {
 
 }
 
-void tstar_tcreate( int sc ) {
+struct frame_struct * tstar_tcreate( int sc, size_t size ) {
 
 
 }

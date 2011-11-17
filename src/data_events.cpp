@@ -78,9 +78,9 @@ void request_page_resp( PageType page ) {
     // We need to increment use count here because a call to request_page_resp
     // corresponds to a user of the page in write mode.
     owm_frame_layout * fheader = GET_FHEADER(page);
-    Closure * incrementor = new_Closure( 1, {
+    Closure * incrementor = new_Closure( 1,
          fheader->usecount+=1;
-     }
+
     );
 
     // TODO : make a page only requested once.
@@ -102,7 +102,7 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
   if ( !PAGE_IS_AVAILABLE(ptr)) {
      request_page_data(ptr);
      Closure * retry_c = new_Closure( 1,
-     {acquire_rec(ptr,t);});
+     acquire_rec(ptr,t););
      register_for_data_arrival(ptr, retry_c);
      return;
   }
@@ -138,8 +138,7 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
       t->tdec();
   }
 
-  Closure * waiter = new_Closure(todo_count,
-  { t->tdec();} );
+  Closure * waiter = new_Closure(todo_count, t->tdec(); );
 
   // We recount for cautiousness.
   int todo_recount = 0;

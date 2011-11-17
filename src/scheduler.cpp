@@ -101,12 +101,12 @@ void ExecutionUnit::process_commits() {
 
         // We create a closure for managing the tdecs :
         Closure * dotdecs = new_Closure( 1,// Because only one frame or object
-        {
+
         for ( auto i = frame_tdecs->begin();
                         i != frame_tdecs->end(); ++ i ) {
                         ask_or_do_tdec(*i);
         }
-        delete frame_tdecs;} );
+        delete frame_tdecs;);
 
         // And trigger it depending on frame type :
 
@@ -207,7 +207,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
     int work_count = 0;
     if ( !PAGE_IS_AVAILABLE( page ) ) {
         // Then schedule itself for when its ready :p
-        auto todo = new_Closure( 1,{prepare_ressources( page );});
+        auto todo = new_Closure( 1,prepare_ressources( page ););
 
         register_for_data_arrival( page, todo );
 
@@ -238,7 +238,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
     }
 
     auto gotoinnersched  = new_Closure( work_count,
-    {schedule_inner( page );}
+    schedule_inner( page );
     );
 
 

@@ -107,7 +107,7 @@ void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
   }
   // Before doing anything else, we must count operations to be done.
   Closure * waiter = new_Closure(count_todo,
-  { c->tdec(); }
+   c->tdec();
   );
 
 
@@ -161,9 +161,9 @@ void planify_invalidation( void *page, node_id_t client ) {
 
   // Then we add a closure which will respond to the client :
   auto continuer = new_Closure( 1,
-      {
+
         NetworkInterface::send_invalidate_ack( client, page );
-      } );
+       );
 
   
   invalidate_and_do( page, continuer );
@@ -207,9 +207,9 @@ void invalidate_and_do ( void * page, Closure * c ) {
   // Todo ; optitimize with a tincr...
 
   Closure * continuer = new_Closure( total_to_wait, 
-	{ 
+
 	  (*c).tdec();
-	}
+
   );
   
   // And we register it into the invalidate_ack map :
