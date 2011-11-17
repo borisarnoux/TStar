@@ -17,7 +17,7 @@ struct DataMessage {
   void * page;
   size_t size;
   char data[];
-};
+} __packed;
 
 struct DataReqMessage{
   int orig;
@@ -31,7 +31,7 @@ struct RWrite {
   size_t offset;
   size_t size;
     char data[];
-};
+} __packed;
 
 struct RWriteAck {
   void *page;
@@ -47,7 +47,7 @@ struct RespTransfer {
   void *page;
   long long shared_nodes_bitmap;
   DataMessage datamsg;
-};
+} __packed;
 
 struct GoTransient {
   void * page;
@@ -291,12 +291,13 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
           forward( m, fheader->next_resp );
           return;
         }
-
         // If this page has no current writers :
         if ( HAS_ZERO_COUNT( fheader ) ) {
+            DEBUG( "Received RWReq %p, transferring.", rwrm.page);
+
             doRespTransfer(rwrm.page,rwrm.orig);
         } else {
-
+            DEBUG( "Received RWReq %p, but busy.",rwrm.page);
           // We have to solve a RW race :
           if ( fheader->reserved ) {
               // Answers go transitive : means to retry
@@ -317,6 +318,8 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
               return;
           } else {
             // We will transfer responsibility ASAP.
+            DEBUG( "Page %p reserved for %d", rwrm.page, rwrm.orig);
+
             Closure * do_transfer = new_Closure (1,
             {doRespTransfer(rwrm.page, rwrm.orig);});
             register_for_usecount_zero(rwrm.page,do_transfer);
@@ -334,9 +337,11 @@ void  NetworkInterface::doRespTransfer(PageType page,  node_id_t target ) {
         CFATAL( !PAGE_IS_RESP(page), "Attempting to transfer RESP of non RESP !!! ");
         // Check for usecount :
         CFATAL( fheader->usecount != 0, "Transferring non zero usecount page.");
+        CFATAL( fheader->size <= 0, "Transferring invalid sized zone");
         // Set state to valid.
         VALIDATE( fheader );
 
+        CHECK_CANARIES(page);
 
         // Transfers the responsibility :
         fheader->next_resp = target;
@@ -345,7 +350,7 @@ void  NetworkInterface::doRespTransfer(PageType page,  node_id_t target ) {
         resp_transfer.shared_nodes_bitmap = export_and_clear_shared_set(page);
         // Because we consider ourselves as valid, bitmap contains local node :
         resp_transfer.shared_nodes_bitmap &= 1<<get_node_num();
-
+        resp_transfer.page = page;
         resp_transfer.datamsg.page = page;
         memcpy( resp_transfer.datamsg.data, fheader->data, fheader->size );
 
@@ -371,15 +376,20 @@ void NetworkInterface::onRespTransfer( MessageHdr &m ) {
         CFATAL ( IS_RESP( fheader ), "Already resp, an error occured" );
         CFATAL( IS_TRANSIENT( fheader ), "Transitive state not allowed to receive resp" );
 
+
         // Erases the data :
         memcpy( fheader->data, rt.datamsg.data, rt.datamsg.size );
+
         // Set resp :
         RESPONSIBILIZE( fheader );
+        SET_CANARIES(fheader);
+        shared_set_load_bit_map(rt.page,rt.shared_nodes_bitmap);
         // Usecount is initialized to zero, it will grow with :
         //  - Immediate increases at "acquire" phases
         //  - Closure-triggered increases when write accessed is signaled.
         fheader->usecount = 0;
         fheader->reserved = false;
+        fheader->size = rt.datamsg.size;
 
         // Signal read and write data arrival :
         signal_data_arrival( rt.datamsg.page);

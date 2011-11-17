@@ -58,7 +58,7 @@ long long export_and_clear_shared_set( void * page ) {
 }
 
 void shared_set_load_bit_map( void * page,long long bitmap ) {
-  ASSERT( sizeof(bitmap) == 64);
+  ASSERT( sizeof(bitmap) >= 8);
   for ( int i = 0; i < 64; ++ i ) {
     if ( (bitmap & 1<<i)
      &&  i!=get_node_num() ) { // We don't want to add ourselves to the map.
@@ -71,8 +71,6 @@ void shared_set_load_bit_map( void * page,long long bitmap ) {
 
 
 void register_forinvalidateack(  void * page, Closure * c ) {
-
-
   invalidation_tm.register_evt(  page, c );
 }
 
