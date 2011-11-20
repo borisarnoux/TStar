@@ -123,6 +123,11 @@ class NetworkInterface : public NetworkLowLevel {
     static void send_tdec( node_id_t target, void * page, int val );
 
 
+    static void send_rwrite( node_id_t target,
+                                        serial_t serial,
+                                        void * page,
+                                        size_t offset,
+                                        size_t len) ;
 
     static void dbg_send_ptr( node_id_t target, void * ptr );
     void dbg_get_ptr( void ** ptrp );

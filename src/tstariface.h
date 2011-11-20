@@ -23,8 +23,8 @@ struct static_data {
 
 void tstar_setup();
 void tstar_tdec( void * target, void * reference );
-void tstar_tcreate( int sc );
-void * tstar_getcfp();
+struct frame_struct * tstar_tcreate( int sc );
+struct frame_struct * tstar_getcfp();
 void tstar_tend();
 
 

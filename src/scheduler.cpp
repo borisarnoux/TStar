@@ -7,7 +7,8 @@
 #include <data_events.hpp>
 #include <invalidation.hpp>
 #include <delegator.hpp>
-
+#include <network.hpp>
+#include <mapper.h>
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
 
@@ -40,9 +41,9 @@ void ExecutionUnit::tdec( struct frame_struct * page, void * ref ) {
 }
 
 
-void ExecutionUnit::register_write( void * object, void * frame, void * pos, size_t len ) {
+void ExecutionUnit::register_write( void * object, void * frame, size_t offset, size_t len ) {
     void * k = object!=NULL?object:frame;
-    struct DWrite w = {object,frame,pos,len};
+    struct DWrite w = {object,frame,offset,len};
     writes_by_ressource.insert( DWriteMap::value_type(k,w));
 }
 
@@ -52,15 +53,14 @@ void ExecutionUnit::process_commits() {
     int nargs = current_cfp->static_data->nargs;
     for ( int i = 0; i < nargs; ++i ) {
         long & current_type = current_cfp->static_data->arg_types[i];
-        if (  current_type == DATA_TYPE ) {
+        if (  current_type == DATA_TYPE || current_type == R_FRAME_TYPE ) {
             continue;
         }
 
         void * current_value = current_cfp->args[i];
 
         // Same thing for all writes ( by object or by frame )
-        std::pair<DWriteMap::iterator,DWriteMap::iterator>
-                dwrite_range = writes_by_ressource.equal_range(current_value);
+        auto dwrite_range = writes_by_ressource.equal_range(current_value);
 
         std::list<DWrite> frame_dwrites;
         for ( auto i = dwrite_range.first; i != dwrite_range.second; ++i) {
@@ -69,26 +69,8 @@ void ExecutionUnit::process_commits() {
 
         writes_by_ressource.erase( dwrite_range.first, dwrite_range.second );
 
-        // Then come the special case where there are no writes.
-        if ( frame_dwrites.empty() ) {
-            // Commits the tdecs immediately.
-            std::pair<TDecMap::iterator,TDecMap::iterator>  tdec_range =
-                    tdecs_by_ressource.equal_range(current_value);
-            for ( auto i = tdec_range.first;
-                  i != tdec_range.second;
-                  ++i ) {
 
-                ask_or_do_tdec(i->second);
-            }
-            // And remove from map.
-            tdecs_by_ressource.erase(tdec_range.first,tdec_range.second);
-
-            // And we can examine the next ressource.
-            continue;
-        }
-
-
-        // Find all tdecs :
+        // We construct a list in heap of all tdecs, and assoiated closure.
         std::pair<TDecMap::iterator,TDecMap::iterator>
                 tdec_range = tdecs_by_ressource.equal_range(current_value);
         // Build a list of tdecs to do :
@@ -100,22 +82,58 @@ void ExecutionUnit::process_commits() {
         tdecs_by_ressource.erase(tdec_range.first,tdec_range.second);
 
         // We create a closure for managing the tdecs :
-        Closure * dotdecs = new_Closure( 1,// Because only one frame or object
+        Closure * dotdecs = new_Closure( 1,// Because only one frame or object.
 
-        for ( auto i = frame_tdecs->begin();
+            for ( auto i = frame_tdecs->begin();
                         i != frame_tdecs->end(); ++ i ) {
                         ask_or_do_tdec(*i);
+            }
+            delete frame_tdecs;
+        );
+
+        // Then come the special case where there are no writes.
+        if ( frame_dwrites.empty() ) {
+            // Commits the tdecs immediately after invalidation :
+
+            if ( current_type == FATP_TYPE ) {
+                ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
+            } else if ( current_type == W_FRAME_TYPE ||
+                current_type == RW_FRAME_TYPE ) {
+                ask_or_do_invalidation_then(current_value, dotdecs );
+            }
+
+
+            // And we can examine the next ressource.
+            continue;
         }
-        delete frame_tdecs;);
 
-        // And trigger it depending on frame type :
+        // At this point we have remote writes registered,
+        // and this requires a two step process :
+        // * Sending RWrites.
+        // * On response do all tdecs.
 
-        if ( current_type == FATP_TYPE ) {
-            ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
-         } else if ( current_type == W_FRAME_TYPE || current_type == RW_FRAME_TYPE ) {
 
-            ask_or_do_invalidation_then(current_value, dotdecs );
+
+        // Now, we need another closure, the one
+        // triggered after the writes commits arrive.
+
+        Closure *  on_write_commits = new_Closure ( frame_dwrites.size(),
+              if ( current_type == FATP_TYPE ) {
+                  ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
+              } else if ( current_type == W_FRAME_TYPE ||
+                  current_type == RW_FRAME_TYPE ) {
+                  ask_or_do_invalidation_then(current_value, dotdecs );
+              }
+
+        );
+
+        // Finally, we do the writes :
+        for ( auto i = frame_dwrites.begin(); i!=frame_dwrites.end(); ++i) {
+            ask_or_do_rwrite_then(current_value, i->offset, i->len, on_write_commits);
+
         }
+
+
     }
 
     // If there are writes remaining : error.

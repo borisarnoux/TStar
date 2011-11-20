@@ -46,12 +46,19 @@ extern "C" {
 
 
 #define GET_FHEADER( page ) ((struct owm_frame_layout*)((intptr_t)(page) - sizeof(struct owm_frame_layout)))
+
+// Canari related functions.
 #define CHECK_CANARIES( page ) \
     do { struct owm_frame_layout * fheader = GET_FHEADER(page);\
     CFATAL( fheader->canari != CANARI || fheader->canari2 != CANARI, "Wrong canaries for page %p", page );\
 } while (0)
+
+
 #define SET_CANARIES(fheader) do { fheader->canari=fheader->canari2=CANARI;}while(0)
 #define CANARI ((int)0xdeadbeef)
+
+//
+#define PAGE_GET_NEXT_RESP(page) get_next_resp(GET_FHEADER(page))
 
 
 struct owm_frame_layout {
@@ -67,6 +74,18 @@ struct owm_frame_layout {
 } __attribute__((__packed__));
 
 
+
+extern int mapper_who_owns( void * ptr );
+
+static inline node_id_t get_next_resp(owm_frame_layout*fheader) {
+    // Change the code of this
+    // Make it more robust.
+    if ( fheader->size != 0 && fheader->canari == fheader->canari2 &&
+         fheader->canari == CANARI ) {
+        return fheader->next_resp;
+    }
+    else return mapper_who_owns(fheader);
+}
 
 
 #ifdef __cplusplus

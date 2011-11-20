@@ -22,10 +22,10 @@ struct TDec {
 struct DWrite {
     void * obj;
     void * frame;
-    void * pos;
+    size_t offset;
     size_t len;
-    DWrite(void * _o, void * _f, void * _p, size_t _l) :
-        obj(_o),frame(_f),pos(_p),len(_l) {}
+    DWrite(void * _o, void * _f, size_t _offset, size_t _l) :
+        obj(_o),frame(_f),offset(_offset),len(_l) {}
 
 };
 
@@ -39,18 +39,20 @@ typedef std::list<struct frame_struct*> CreatedFramesList;
 
 class ExecutionUnit {
 private:
-    static __thread ExecutionUnit * local_execution_unit;
 
-    struct frame_struct * current_cfp;
     // Ressource -> writes.
     DWriteMap writes_by_ressource;
     TDecMap tdecs_by_ressource;
     CreatedFramesList created_frames_list;
 
 public:
+    struct frame_struct * current_cfp;
+
+    static __thread ExecutionUnit * local_execution_unit;
+
     static void executor( struct frame_struct * page );
     void tdec( struct frame_struct * page, void * ref );
-    void register_write( void * object, void * frame, void * pos, size_t len );
+    void register_write( void * object, void * frame, size_t offset, size_t len );
     void process_commits();
     bool check_ressources();
     static void before_code();

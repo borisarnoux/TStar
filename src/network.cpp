@@ -580,6 +580,29 @@ void NetworkInterface::send_tdec( node_id_t target, void * page, int val ) {
 
 }
 
+void NetworkInterface::send_rwrite( node_id_t target,
+                                    serial_t serial,
+                                    void * page,
+                                    size_t offset,
+                                    size_t len) {
+    RWrite &rw = *(RWrite*)new char[sizeof(RWrite)+ len];
+    memcpy( rw.data, (char*)page+offset, len );
+    rw.offset = offset;
+    rw.orig = get_node_num();
+    rw.serial = serial;
+    rw.page = page;
+    rw.size = len;
+
+    MessageHdr m;
+    m.from = get_node_num();
+    m.to = target;
+    m.data = &rw;
+    m.data_size = sizeof(RWrite) + len;
+    m.type = RWriteType;
+
+    send(m);
+}
+
 void NetworkInterface::onTransPtr(MessageHdr &msg) {
     dbg_ptr_holder = ((TransPtr*)msg.data)->ptr;
     dbg_ptr_signal = 1;

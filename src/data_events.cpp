@@ -63,6 +63,15 @@ void register_for_write_arrival( PageType page, Closure * c ) {
     write_arrived_mapper.register_evt(page, c);
 }
 
+void register_for_commitack(PageType page, serial_t serial, Closure * c ) {
+    commit_key_struct cks = {serial, page};
+    write_commit_mapper.register_evt(cks, c);
+}
+
+void signal_commit(PageType page, serial_t serial ) {
+    commit_key_struct cks = {serial,page};
+    write_commit_mapper.signal_evt(cks);
+}
 
 void request_page_data( PageType page ) {
     FATAL("Not implemented."); // TODO
@@ -236,4 +245,27 @@ void release_rec( fat_pointer_p ptr ) {
 
 void ask_or_do_tdec( void * page ) {
     FATAL("Not implemented");
+}
+
+
+static __thread serial_t serial_source = 0;
+void ask_or_do_rwrite_then( PageType page, size_t offset, size_t len, Closure * c) {
+
+    // For now just consider doingthis on a RESP is an error :
+    CFATAL( PAGE_IS_RESP(page), "Asking for RWRite on locally available page.");
+    node_id_t nextresp = PAGE_GET_NEXT_RESP(page);
+
+    // Get a serial :
+    if ( serial_source == 0 ) {
+        serial_source = get_thread_num();
+    }
+
+    serial_t chosen_serial = serial_source;
+    // This way each thread counts with different serials.
+    serial_source += get_num_threads();
+
+    // Register the closure :
+    register_for_commitack( page, chosen_serial, c);
+    NetworkInterface::send_rwrite( nextresp, chosen_serial, page, offset, len );
+
 }
