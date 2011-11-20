@@ -82,6 +82,8 @@ void NetworkLowLevel::init( int* argc, char *** argv ) {
       MPI_Init(argc, argv );
       MPI_Comm_rank(MPI_COMM_WORLD, &node_num );
       MPI_Comm_size(MPI_COMM_WORLD, &num_nodes ); 
+      set_node_num(node_num);
+      set_num_nodes(num_nodes);
 }
 
 void NetworkLowLevel::finalize() {
@@ -89,7 +91,7 @@ void NetworkLowLevel::finalize() {
 
 }
 
-bool NetworkLowLevel::receive( MessageHdr &m ) {
+bool NetworkLowLevel::receive( MessageHdr &m ) const {
       MPI_Status s;
       int flag = 0;
       MPI_Iprobe( MPI_ANY_SOURCE,
@@ -119,13 +121,14 @@ bool NetworkLowLevel::receive( MessageHdr &m ) {
 
 
 
-void * NetworkInterface::dbg_ptr_holder;
-int NetworkInterface::dbg_ptr_signal;
+void * NetworkInterface::dbg_ptr_holder = NULL;
+int NetworkInterface::dbg_ptr_signal = 0;
 
 NetworkInterface::NetworkInterface() : NetworkLowLevel() {
 // This marco registers the handlers (following naming convention "onX")
 // with the types enum (convention XType), into a table for multiplexing
 // messages.
+
 #define BIND_MT( id ) message_type_table[id##Type] = &on##id
       BIND_MT( DataMessage );
       BIND_MT( DataReqMessage );
@@ -144,7 +147,7 @@ NetworkInterface::NetworkInterface() : NetworkLowLevel() {
 #undef BIND_MT
 }
 
-void NetworkInterface::process_messages() {
+void NetworkInterface::process_messages() const {
       MessageHdr m;
       while ( true ) {
         if ( ! receive( m ) ) {
@@ -161,7 +164,9 @@ void NetworkInterface::process_messages() {
 // Forwarding :
 
 void NetworkInterface::forward( MessageHdr &m, node_id_t target ) {
-    DEBUG( "Forwarding message");
+      DEBUG( "Forwarding message");
+      CFATAL( target == get_node_num(), "Forwarding loop.");
+
       m.to = target;
       m.from = get_node_num();
       send( m );
@@ -209,7 +214,7 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         if ( !IS_RESP( fheader )) {
           DEBUG( "Fheader fof req message : size :%d, next_resp : %d", (int)fheader->size, fheader->next_resp);
           CFATAL(drm.orig == get_node_num(), "Forwarding loop.");
-          forward( m, fheader->next_resp );
+          forward( m, PAGE_GET_NEXT_RESP(drm.page) );
           return;
         }
 
@@ -261,6 +266,8 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
         // Then send ack :
         RWriteAck rwa;
         rwa.page = rwm.page;
+        rwa.serial = rwm.serial;
+
 
         MessageHdr resphdr;
         resphdr.from = get_node_num();
@@ -290,7 +297,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
         // Check or forward.
         if ( ! IS_RESP( fheader ) ) {
           CFATAL(rwrm.orig == get_node_num(), "Forwarding loop.");
-          forward( m, fheader->next_resp );
+          forward( m, PAGE_GET_NEXT_RESP(rwrm.page) );
           return;
         }
         // If this page has no current writers :
@@ -299,24 +306,36 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
 
             doRespTransfer(rwrm.page,rwrm.orig);
         } else {
+            // TODO : Here we have one request to process before
+            // others. If its not the case, it should be ok anyway
+            // but would generate a lot of transfers.
+            // It would be nice if task mappers respected FIFO order.
+
             DEBUG( "Received RWReq %p, but busy.",rwrm.page);
-          // We have to solve a RW race :
-          if ( fheader->reserved ) {
+            // We have to solve a RW race, we will
+            // simply artificially delay the message.
+
+            if ( fheader->reserved ) {
               // Answers go transitive : means to retry
               // later, and might mean actually transient
-              Closure * gotransientClosure = new_Closure(1,
-              GoTransient gtresp;
-              gtresp.page = rwrm.page;
 
-              MessageHdr resp;
-              resp.from = get_node_num();
-              resp.to = rwrm.orig;
-              resp.type = GoTransientType;
-              resp.data_size = sizeof( GoTransient);
-              resp.data = &gtresp;
 
-              send( resp ); );
-              register_for_usecount_zero(rwrm.page, gotransientClosure);
+              Closure * transfer_message = new_Closure(1,
+                RWReq new_req;
+                new_req.page = rwrm.page;
+                new_req.orig = rwrm.orig;
+
+                MessageHdr resp;
+                resp.from = get_node_num();
+                resp.to = PAGE_GET_NEXT_RESP(rwrm.page);
+                resp.type = RWReqType;
+                resp.data_size = sizeof(RWReq);
+                resp.data = &new_req;
+
+                send( resp );
+
+              );
+              register_for_usecount_zero(rwrm.page, transfer_message);
               return;
           } else {
             // We will transfer responsibility ASAP.
@@ -602,6 +621,7 @@ void NetworkInterface::send_rwrite( node_id_t target,
 
     send(m);
 }
+
 
 void NetworkInterface::onTransPtr(MessageHdr &msg) {
     dbg_ptr_holder = ((TransPtr*)msg.data)->ptr;

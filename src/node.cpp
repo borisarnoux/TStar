@@ -2,5 +2,5 @@
 
 
 
-node_id_t my_node;
-node_id_t num_nodes;
+node_id_t my_node = -1;
+int num_nodes = -1;

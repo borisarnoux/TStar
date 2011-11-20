@@ -286,7 +286,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
         }
     }
 
-    CFATAL( recount_work != work_count, "Memroy frame state modified during prepare_ressources.");
+    CFATAL( recount_work != work_count, "Memory frame state modified during prepare_ressources.");
 
 }
 

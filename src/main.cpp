@@ -18,7 +18,6 @@
 #endif
 
 int total_nodes = 0;
-
 int tstar_main_test1(int argc, char ** argv, struct frame_struct* first_task) {
        // Create a network interface, embedding parameters ( here MPI )
        NetworkInterface ni;
@@ -223,85 +222,71 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
     // Create a network interface, embedding parameters ( here MPI )
     NetworkInterface ni;
     ni.init(&argc, &argv);
-    // Get the external infos.
-    my_node = ni.node_num;
-    total_nodes = ni.num_nodes;
+
 
     // Setup address space.
-    mapper_initialize_address_space((void*)ZONE_START, 0x4000, total_nodes);
+    mapper_initialize_address_space((void*)ZONE_START, 0x4000, get_num_nodes());
 
     // Creates a scheduler :
     Scheduler s;
 
     if ( get_node_num() == 0 ) {
-        char * s = (char*) owm_malloc(40);
-        strcpy( s, "Toto");
+        DEBUG("Starting (%d)/%d",get_node_num(),get_num_nodes());
+        char * s1 = (char*) owm_malloc(40);
+        char * s2 = (char*) owm_malloc(40);
 
-        CHECK_CANARIES(s);
-        owm_frame_layout * fheader = GET_FHEADER(s);
-        // Prepares for resp transfer.
-        fheader->usecount = 0;
+        owm_frame_layout * fheader1 = GET_FHEADER(s1);
+        owm_frame_layout * fheader2 = GET_FHEADER(s2);
 
-        ni.dbg_send_ptr(1, s);
-        DEBUG("Pointer sent, processing messages in loop.");
+        fheader1->usecount = 0;
+        fheader2->usecount = 0;
 
-        ni.dbg_get_ptr(NULL);
+        strcpy( s1, "Toto");
+        strcpy( s2, "Tata");
 
+        fat_pointer_p fp = create_fatp(2);
+        append_page_to_fatp(s1, R_FRAME_TYPE, fp);
+        append_page_to_fatp(s2, RW_FRAME_TYPE, fp);
 
-    } else {
-        char *s = NULL;
-        DEBUG( "Getting pointer...");
-        ni.dbg_get_ptr((void**)&s);
-        DEBUG( "Got pointer from 0.");
-        ni.send_data_req(0,s);
-        DEBUG( "Data request message sent.");
-        while ( memcmp( s, "Toto", 4)) {
-            ni.process_messages();
-
+        for (int i = 1; i < get_num_nodes(); ++i) {
+            DEBUG("Sending pointer to %d", i);
+            ni.dbg_send_ptr(i, fp);
         }
 
-        bool finished = 0;
-        bool *finishedp = &finished;
 
-        Closure * c = new_Closure( 1,
-        {    // Signal termination.
-                                   printf( "Reacting to invalidateAck");
-                *finishedp = 1;
-    });
+        for (int i = 1; i < get_num_nodes(); ++i) {
+            DEBUG( "Finished : %d/%d", i+1, get_num_nodes());
+            ni.dbg_get_ptr(NULL);
+        }
+        for (int i = 1; i < get_num_nodes(); ++i) {
+            DEBUG("Sending pointer to %d", i);
+            ni.dbg_send_ptr(i, NULL);
+        }
 
-    register_forinvalidateack(s, c);
+    } else {
+        DEBUG("Starting (%d)/%d",get_node_num(), get_num_nodes());
+        Delegator d;
+        fat_pointer_buffer* s;
+        // Get the pointer
+        ni.dbg_get_ptr((void **)&s);
+        DEBUG( "Got pointer %p", s);
 
-    ask_or_do_invalidation_then(s,NULL);
+        bool done = false;
+        bool * donep = &done;
+        Closure * c = new_Closure( 1, *donep=true; );
+        DELEGATE( d, acquire_rec(s, c); );
+        while ( !done ) {
+            DELEGATE(d,ni.process_messages(););
+        }
+        release_rec(s);
+        ni.dbg_send_ptr(0,NULL);
+        // For terminating while handling messages.
+        ni.dbg_get_ptr(NULL);
+     }
 
-    while ( PAGE_IS_VALID(s) ) {
-        ni.process_messages();
-    }
+     ni.finalize();
 
-
-    while ( !finished ) {
-        ni.process_messages();
-    }
-
-    bool is_resp = false;
-    bool *is_resp_p = &is_resp;
-    Closure * become_resp = new_Closure(1,
-    *is_resp_p = true; );
-
-    request_page_resp(s);
-    register_for_write_arrival(s,become_resp);
-    while (!is_resp) {
-        ni.process_messages();
-    }
-    ni.dbg_send_ptr(0, NULL);
-
-
-    printf( "Finished, success.\n");
-
-    }
-
-    ni.finalize();
-
-    return 0;
+     return 0;
 
 }
 
@@ -318,5 +303,8 @@ int main( int argc, char ** argv ) {
 
 #ifdef BUILD_TEST3
            tstar_main_test3(argc, argv, NULL );
+#endif
+#ifdef BUILD_TEST4
+           tstar_main_test4(argc, argv, NULL );
 #endif
        }

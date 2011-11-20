@@ -74,7 +74,7 @@ void signal_commit(PageType page, serial_t serial ) {
 }
 
 void request_page_data( PageType page ) {
-    FATAL("Not implemented."); // TODO
+    NetworkInterface::send_data_req( PAGE_GET_NEXT_RESP(page), page);
 }
 
 void request_page_resp( PageType page ) {
@@ -109,6 +109,7 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
 
   // Auto reschedules itself for data arrival (if needed)
   if ( !PAGE_IS_AVAILABLE(ptr)) {
+      DEBUG("Acquire rec : rescheduling for %p",ptr);
      request_page_data(ptr);
      Closure * retry_c = new_Closure( 1,
      acquire_rec(ptr,t););
@@ -169,7 +170,13 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
             if ( !PAGE_IS_RESP(r.page) ) {
                 todo_recount += 1;
                 request_page_resp(r.page);
+                Closure * incrementor = new_Closure (1,
+                    GET_FHEADER(r.page)->usecount++;
+                   );
+
+
                 register_for_write_arrival(r.page, waiter);
+                register_for_write_arrival(r.page, incrementor);
             } else {
                 // We need to increase the use count :
                 owm_frame_layout * fheader = GET_FHEADER( r.page );

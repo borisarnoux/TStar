@@ -55,7 +55,7 @@ public:
     void init( int* argc, char *** argv );
     void finalize();
 
-    bool receive( MessageHdr &m );
+    bool receive( MessageHdr &m ) const;
 
     static inline void send( MessageHdr &m ) {
       MPI_Send( m.data, m.data_size, MPI_CHAR, m.to, m.type, MPI_COMM_WORLD);
@@ -73,7 +73,7 @@ class NetworkInterface : public NetworkLowLevel {
 
     NetworkInterface();
 
-    void process_messages();
+    void process_messages() const ;
 
 
     // Forwarding :

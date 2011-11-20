@@ -25,7 +25,7 @@ typedef struct fat_pointer_buffer * fat_pointer_p;
 
 fat_pointer_p create_fatp( size_t nelts );
 
-void append_fatp_to_fatp( fat_pointer_p , int perms, fat_pointer_p fatp );
+void append_page_to_fatp( void * page, int perms, fat_pointer_p fatp );
 
 void notify_fatp_transfer( fat_pointer_p fatp );
 

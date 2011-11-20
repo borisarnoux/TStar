@@ -48,7 +48,7 @@ long long export_and_clear_shared_set( void * page ) {
   long long retval = 0;
   
   for ( auto i = r.first; i != r.second; ++ i ) {
-   
+    DEBUG("SharedSet : transferring %d as valid copy holder", i->second);
     retval |= 1<<(i->second);
 
   }
@@ -63,6 +63,7 @@ void shared_set_load_bit_map( void * page,long long bitmap ) {
     if ( (bitmap & 1<<i)
      &&  i!=get_node_num() ) { // We don't want to add ourselves to the map.
 	    resp_shared_map.insert( RespSharedMapElt( page, i) );
+            DEBUG( "shared set(%p) += %d",page, i);
     }
 
   }
