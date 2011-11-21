@@ -278,6 +278,21 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
         while ( !done ) {
             DELEGATE(d,ni.process_messages(););
         }
+
+
+        if (get_node_num()==4) {
+            done = false;
+            c = new_Closure( 1, *donep=true; );
+            ask_or_do_invalidation_rec_then(s, c);
+            while ( !done ) {
+                DELEGATE(d,ni.process_messages(););
+            }
+        }
+
+
+
+
+
         release_rec(s);
         ni.dbg_send_ptr(0,NULL);
         // For terminating while handling messages.

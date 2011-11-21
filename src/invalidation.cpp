@@ -81,6 +81,7 @@ void register_forinvalidateack(  void * page, Closure * c ) {
 
 
 void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
+  // TODO : mark as delegator only.
   // Because p is a fat pointer,
   // it is supposed to stay valid until this point.
   CFATAL( !PAGE_IS_AVAILABLE(p), "Illegal invalid fat pointer.");
