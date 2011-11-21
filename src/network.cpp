@@ -193,8 +193,12 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
         memcpy( drm.page, drm.data, drm.size );
         // Make it valid :
         VALIDATE( fheader );
+        fheader->canari = CANARI;
+        fheader->canari2 = CANARI;
+
         DEBUG( "Data copied");
         // Signal data arrived :
+        CFATAL ( !PAGE_IS_AVAILABLE(drm.page), "Inconsistent validation");
         signal_data_arrival( drm.page );
         DEBUG( "Data arrived and signaled : %p, size %d", drm.page,(int)drm.size);
 }

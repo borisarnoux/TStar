@@ -245,8 +245,13 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
         strcpy( s2, "Tata");
 
         fat_pointer_p fp = create_fatp(2);
+        DEBUG("FP1 : %p", fp);
+        fat_pointer_p fp2 = create_fatp(2);
+        DEBUG("FP2 : %p",fp2);
         append_page_to_fatp(s1, R_FRAME_TYPE, fp);
-        append_page_to_fatp(s2, RW_FRAME_TYPE, fp);
+        append_page_to_fatp(fp2, FATP_TYPE, fp);
+        append_page_to_fatp(s2, RW_FRAME_TYPE, fp2);
+
 
         for (int i = 1; i < get_num_nodes(); ++i) {
             DEBUG("Sending pointer to %d", i);
@@ -277,6 +282,7 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
         DELEGATE( d, acquire_rec(s, c); );
         while ( !done ) {
             DELEGATE(d,ni.process_messages(););
+
         }
 
 
@@ -288,9 +294,6 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
                 DELEGATE(d,ni.process_messages(););
             }
         }
-
-
-
 
 
         release_rec(s);

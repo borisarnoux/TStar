@@ -52,6 +52,7 @@ void signal_write_commited( serial_t serial, PageType page) {
 
 
 void signal_data_arrival(PageType page ) {
+    DEBUG( "Data arrival : %p",page);
     data_arrived_mapper.signal_evt( page );
 }
 
@@ -92,6 +93,8 @@ void request_page_resp( PageType page ) {
 
     );
 
+    register_for_write_arrival(page, incrementor);
+
     // TODO : make a page only requested once.
     NetworkInterface::send_resp_req( mapper_who_owns(page),page);
 
@@ -107,15 +110,22 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
 
   delegator_only();
 
-  // Auto reschedules itself for data arrival (if needed)
+  // Reschedules itself for data arrival (if needed)
   if ( !PAGE_IS_AVAILABLE(ptr)) {
-      DEBUG("Acquire rec : rescheduling for %p",ptr);
+      if ( PAGE_IS_MALFORMED(ptr)) {
+          FATAL( "Malformed page (%p)", ptr);
+      }
+     DEBUG("Acquire rec : rescheduling for %p",ptr);
      request_page_data(ptr);
      Closure * retry_c = new_Closure( 1,
      acquire_rec(ptr,t););
      register_for_data_arrival(ptr, retry_c);
+     DEBUG( "Exiting Acquire rec after rescheduling.");
      return;
   }
+  DEBUG( "Ptr available : no rescheduling !");
+
+  CHECK_CANARIES(ptr);
 
   int todo_count = 0;
   // Examination of the contents : counting.
@@ -184,6 +194,7 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
             }
         } else if ( r.perms == FATP_TYPE ) {
             fat_pointer_p rfat = (fat_pointer_p) r.page;
+            DEBUG( "Recursing on fatp : %p (Available ? %d)", rfat, PAGE_IS_AVAILABLE(rfat));
             // Recurse (always)
             todo_recount += 1;
             acquire_rec(rfat, waiter);

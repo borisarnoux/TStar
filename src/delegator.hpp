@@ -127,7 +127,9 @@ private:
 	  // Execute the delegation.
   	  CFATAL(delegator_flag == 1, "Nested delegators" );
 	  delegator_flag = 1;
+          DEBUG("[In delegator]");
 	  (*c)();
+          DEBUG( "[Out of delegator]");
 	  delegator_flag = 0;
 	}
   }

@@ -34,6 +34,7 @@ extern "C" {
 #define IS_RESP( fh ) ((fh)->proto_status == RESP )
 #define IS_VALID( fh ) ((fh)->proto_status == VALID )
 #define IS_TRANSIENT( fh ) ((fh)->proto_status == TRANSIENT )
+#define IS_MALFORMED( fh ) (!IS_INVALID(fh) && !IS_AVAILABLE(fh) && !IS_TRANSIENT(fh))
 
 #define HAS_ZERO_COUNT(fh) ((fh)->usecount == 0)
 #define PAGE_IS_TRANSIENT( page ) IS_TRANSIENT( GET_FHEADER(page))
@@ -43,7 +44,7 @@ extern "C" {
 #define PAGE_IS_RESP( page ) IS_RESP( GET_FHEADER(page) )
 #define PAGE_IS_INVALID(page) IS_INVALID( GET_FHEADER(page))
 #define PAGE_HAS_ZERO_COUNT( page ) HAS_ZERO_COUNT( GET_FHEADER(page))
-
+#define PAGE_IS_MALFORMED( page ) IS_MALFORMED( GET_FHEADER(page))
 
 #define GET_FHEADER( page ) ((struct owm_frame_layout*)((intptr_t)(page) - sizeof(struct owm_frame_layout)))
 
