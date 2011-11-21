@@ -76,21 +76,33 @@ typedef boost::lock_guard<RecMutex> ScopedLock;
 
 class Delegator {
   std::list<Closure*> delegations;
-  int occupied;
   RecMutex recmutex;
+  int occupied;
+  int fastl;
 
 public :
-  Delegator() : occupied(0) {}
+  Delegator() : occupied(0),fastl(0) {}
 
   void delegate( Closure *c ) {
-	{
+      {
           ScopedLock scl(recmutex);
-	  delegations.push_back( c );
-	}
-	
-	if ( __sync_bool_compare_and_swap( &occupied, 0, 1 ) ) {
-	  do_delegations();
-	  __sync_bool_compare_and_swap( &occupied, 1, 0 );
+          delegations.push_back( c );
+      }
+
+       while(! __sync_bool_compare_and_swap(&fastl,0,1) );
+
+        if ( occupied ==  0 ) {
+          occupied = 1;
+
+          __sync_synchronize();
+          do {
+                fastl = 0;
+                do_delegations();
+            } while(! __sync_bool_compare_and_swap(&fastl,0,1));
+
+           occupied = 0;
+           __sync_synchronize();
+           fastl = 0;
 	}
 
 	
