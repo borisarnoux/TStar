@@ -79,7 +79,9 @@ public:
    }
 
    virtual ~TaskMapper( ) {
+       set_current_color(36);
        DEBUG( "TaskMapper %s was used %d times.", name, use_count);
+       set_current_color(0);
    }
 
 };

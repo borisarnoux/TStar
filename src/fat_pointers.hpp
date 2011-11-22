@@ -16,7 +16,7 @@ struct fat_pointer_buffer {
   int elt_count; // Size of container.
   int use_count; // Used slots
   struct ressource_desc elements[];
-};
+} __attribute__((__packed__));
 
 
 typedef struct fat_pointer_buffer * fat_pointer_p;

@@ -68,7 +68,11 @@ class Scheduler {
 
 public :
 
-    Scheduler() : global_local_threshold(omp_get_num_threads() * 5 ), task_count(0) {}
+    Scheduler() : global_local_threshold(omp_get_num_threads() * 5 ), task_count(0) {
+        if ( ExecutionUnit::local_execution_unit == NULL )  {
+            ExecutionUnit::local_execution_unit = new ExecutionUnit;
+        }
+    }
 
     // This is the entry point, should be attained when SC reaches 0.
     void schedule_global( struct frame_struct * page );
