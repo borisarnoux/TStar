@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <delegator.hpp>
 
 #define _round_toptrsize(val) ((val)%sizeof(intptr_t)==0?(val):(val)-((val)%sizeof(intptr_t)) + sizeof(intptr_t))
 
@@ -202,6 +203,8 @@ struct named_vector_helper<pos, N,T, A...> : public named_vector_helper<pos+_rou
 template <typename ...A>
 struct named_vector : public named_vector_helper<0, A... >  {
   typedef layout_descriptor<A...> layout;
+  static const int length = sizeof...(A)/2;
+
 };
 
 /**** Named Locator *****/
@@ -275,22 +278,54 @@ struct fusion : public T1, public T2 {
   static const int length = T1::length + T2::length;
 };
 
-template <typename T1,typename T2>
+
+template <typename T1, typename T2>
+struct static_task_data {
+    static_task_data() {
+
+    }
+
+    void (*fn)();
+    int nargs;
+    static const int length = T1::length + T2::length;
+    typedef fusion<typename T1::layout, typename T2::layout> layout_type;
+
+    union {
+        fusion<typename T1::layout, typename T2::layout> layout;
+        intptr_t elements[layout_type::length];
+    };
+
+};
+
+template <typename T1,typename T2, typename L>
 struct task_data : public T1, public T2 {
-	task_data() : T1(), T2() {
+   task_data() : T1(), T2() {
 		printf( "Taskdata constructor : %u %u\n", sizeof(T1), sizeof(T2) );
-	}
+                static_data_p = &layout;
+                layout.fn = &exec_lambda;
+    }
+
+    L lambda;
+
+    static void exec_lambda() {
+        struct task_data<T1,T2,L> * t = (struct task_data<T1,T2,L> *) tstar_getcfp();
+        t->lambda();
+    }
+
+    struct static_task_data<T1,T2> * static_data_p;
+    static static_task_data<T1,T2> layout;
 
     typedef T1 needs;
     typedef T2 provides;
-    static fusion<typename needs::layout,typename provides::layout> layout;
 
-	using needs::get;
-	using needs::get_byname;
-	using provides::get_offset;
+    using needs::get;
+    using needs::get_byname;
+    using provides::get_offset;
 };
-template <typename T1,typename T2>
-fusion<typename T1::layout,typename T2::layout> task_data<T1,T2>::layout;
+template <typename T1,typename T2,typename L>
+static_task_data<T1,T2> task_data<T1,T2,L>::layout;
+
+
 
 /*
 #define bind( T1, var1, T2, var2 ) do {
@@ -303,7 +338,7 @@ fusion<typename T1::layout,typename T2::layout> task_data<T1,T2>::layout;
 } while (0) */
 
 int main() {
-  task_data<named_vector<vdef(Cat),int>,named_locator<vdef(Mouse),int,vdef(Mom), int> >a;
+    task_data<named_vector<vdef(Cat),int>,named_locator<vdef(Mouse),int,vdef(Mom), int>, >a;
     
   a.needs::get<int,0>() = 3;
   size_t & off = a.get_offset<size_t>( vname(Mom) );
