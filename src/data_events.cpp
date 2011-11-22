@@ -41,18 +41,22 @@ void register_for_usecount_zero( PageType page, Closure * c ) {
 }
 
 void signal_write_arrival( PageType page ) {
+    DEBUG( "DATAEVENTS -- Write arrival on : %p",page);
+
     write_arrived_mapper.signal_evt( page ); 
 }
 
 
 void signal_write_commited( serial_t serial, PageType page) {
+     DEBUG( "DATAEVENTS -- Write commited on : %p, serial %d",page,serial);
+
      struct commit_key_struct key = {serial,page};
      write_commit_mapper.signal_evt( key );
 }
 
 
 void signal_data_arrival(PageType page ) {
-    DEBUG( "Data arrival : %p",page);
+    DEBUG( "DATAEVENTS -- Data arrival : %p",page);
     data_arrived_mapper.signal_evt( page );
 }
 
@@ -92,7 +96,6 @@ void request_page_resp( PageType page ) {
          fheader->usecount+=1;
 
     );
-
     register_for_write_arrival(page, incrementor);
 
     // TODO : make a page only requested once.
@@ -180,13 +183,9 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
             if ( !PAGE_IS_RESP(r.page) ) {
                 todo_recount += 1;
                 request_page_resp(r.page);
-                Closure * incrementor = new_Closure (1,
-                    GET_FHEADER(r.page)->usecount++;
-                   );
 
 
                 register_for_write_arrival(r.page, waiter);
-                register_for_write_arrival(r.page, incrementor);
             } else {
                 // We need to increase the use count :
                 owm_frame_layout * fheader = GET_FHEADER( r.page );
@@ -248,7 +247,7 @@ void release_rec( fat_pointer_p ptr ) {
               CFATAL( rfat->smart_count < 0, "Invalid smart count for fat pointer %p", rfat );
 
               if ( rfat->smart_count == 0 ) {
-                  FATAL( "TODO : not implemented.");
+                  //FATAL( "TODO : not implemented.");
                   // Free the smart pointer.
               }
 
