@@ -13,7 +13,7 @@ all : exec
 	
 
 exec : $(O_FILES)
-	mpic++ -fopenmp -o $@ $^
+	mpic++  $(MAKEOPTS) -fopenmp -o $@ $^
 
 %.o : %.cpp
 	mpic++ -c $(MAKEOPTS) -o $@ $^ -std=c++0x -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused 
