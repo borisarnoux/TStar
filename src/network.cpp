@@ -164,7 +164,7 @@ void NetworkInterface::process_messages() const {
 // Forwarding :
 
 void NetworkInterface::forward( MessageHdr &m, node_id_t target ) {
-      DEBUG( "Forwarding message");
+      DEBUG( "NETWORK -- Forwarding message.");
       CFATAL( target == get_node_num(), "Forwarding loop.");
 
       m.to = target;
@@ -180,7 +180,7 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
 
       struct owm_frame_layout *fheader = 
                   GET_FHEADER(drm.page);
-      DEBUG( "Received data message : %p, size : %d", drm.page,(int)drm.size);
+      DEBUG( "NETWORK : Received DataMessage : page %p, size : %d", drm.page,(int)drm.size);
 
         fheader->size = drm.size;
 
@@ -196,11 +196,9 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
         fheader->canari = CANARI;
         fheader->canari2 = CANARI;
 
-        DEBUG( "Data copied");
         // Signal data arrived :
         CFATAL ( !PAGE_IS_AVAILABLE(drm.page), "Inconsistent validation");
         signal_data_arrival( drm.page );
-        DEBUG( "Data arrived and signaled : %p, size %d", drm.page,(int)drm.size);
 }
 
 void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
@@ -222,7 +220,7 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
           return;
         }
 
-        DEBUG( "DataReqMessage Received : page %p from %d", drm.page, drm.orig );
+        DEBUG( " NETWORK -- DataReqMessage Received : page %p from %d", drm.page, drm.orig );
 
         // Build an answer.
         DataMessage & resp = *((DataMessage*) new char[sizeof(DataMessage) +fheader->size] );
@@ -231,7 +229,6 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         resp.page = drm.page;
 
 
-        DEBUG( "Responding to message ");
         memcpy( resp.data, drm.page, fheader->size );
 
         // Send it :
@@ -244,7 +241,6 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
 
 
         send( resphdr );
-        DEBUG( "Answer sent.");
         // TODO : replace with smart pointer...
         delete &resp;
         // Then add the recipient to the shared list of nodes :
@@ -263,6 +259,7 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
           return;
         }
 
+        DEBUG( "NETWORK -- Received RWrite on (%p) with data %5s...", rwm.page, rwm.data);
         // Case of a resp node :
         // Integrate the write :
         memcpy( (char*)rwm.page + rwm.offset, rwm.data, rwm.size );
@@ -288,6 +285,7 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
 void NetworkInterface::onRWriteAck( MessageHdr &m ) {
         RWriteAck &rwa = *(RWriteAck*) m.data;
 
+        DEBUG( "NETWORK -- Received RWriteAck for page : (%p), serial : %d", rwa.page, rwa.serial);
         // Not much else to do but to signal.
         signal_write_commited( rwa.serial, rwa.page );
 
@@ -306,7 +304,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
         }
         // If this page has no current writers :
         if ( HAS_ZERO_COUNT( fheader ) ) {
-            DEBUG( "Received RWReq %p, transferring.", rwrm.page);
+            DEBUG( "NETWORK -- RWReq received on %p, transferring.", rwrm.page);
 
             doRespTransfer(rwrm.page,rwrm.orig);
         } else {
@@ -315,7 +313,7 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
             // but would generate a lot of transfers.
             // It would be nice if task mappers respected FIFO order.
 
-            DEBUG( "Received RWReq %p, but busy.",rwrm.page);
+            DEBUG( "NETWORK -- RWReq received on %p, but busy.",rwrm.page);
             // We have to solve a RW race, we will
             // simply artificially delay the message.
 

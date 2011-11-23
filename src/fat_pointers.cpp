@@ -17,6 +17,7 @@ fat_pointer_p create_fatp( size_t nelts ) {
   p->smart_count = 1;
   p->elt_count = nelts;
   p->use_count = 0;
+
   memset( p->elements, 0, nelts * sizeof( struct ressource_desc ) );
 
   return p;
@@ -24,7 +25,6 @@ fat_pointer_p create_fatp( size_t nelts ) {
 
 
 void notify_fatp_transfer( fat_pointer_p fatp ) {
-  // Special message or increase depending on RESP.
-  // Effect : smart_count ++;
+  fatp->smart_count ++;
 }
 

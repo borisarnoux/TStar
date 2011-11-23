@@ -252,6 +252,8 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
         append_page_to_fatp(fp2, FATP_TYPE, fp);
         append_page_to_fatp(s2, RW_FRAME_TYPE, fp2);
 
+        notify_fatp_transfer(fp);
+        //release_rec( fp );
 
         for (int i = 1; i < get_num_nodes(); ++i) {
             DEBUG("Sending pointer to %d", i);
@@ -264,7 +266,6 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
             ni.dbg_get_ptr(NULL);
         }
         for (int i = 1; i < get_num_nodes(); ++i) {
-            DEBUG("Sending pointer to %d", i);
             ni.dbg_send_ptr(i, NULL);
         }
 
@@ -279,7 +280,7 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
         bool done = false;
         bool * donep = &done;
         Closure * c = new_Closure( 1, *donep=true; );
-        DELEGATE( d, acquire_rec(s, c); );
+        DELEGATE( d, DEBUG( "Delegated acquire rec:");acquire_rec(s, c); );
         while ( !done ) {
             DELEGATE(d,ni.process_messages(););
 
@@ -307,6 +308,7 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
      return 0;
 
 }
+
 
 
 

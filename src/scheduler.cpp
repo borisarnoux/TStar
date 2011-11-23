@@ -195,11 +195,12 @@ void ExecutionUnit::after_code() {
 }
 
 
-__thread ExecutionUnit * ExecutionUnit::local_execution_unit;
+__thread ExecutionUnit * ExecutionUnit::local_execution_unit = NULL;
 
 
 // This is the entry point, should be attained when SC reaches 0.
 void Scheduler::schedule_global( struct frame_struct * page )  {
+
     if ( task_count > global_local_threshold ) {
         schedule_external( page );
     } else {
