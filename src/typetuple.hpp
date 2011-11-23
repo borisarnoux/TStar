@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <delegator.hpp>
 
 #define _round_toptrsize(val) ((val)%sizeof(intptr_t)==0?(val):(val)-((val)%sizeof(intptr_t)) + sizeof(intptr_t))
 
+#define CONCAT(A,B) A##B
 
 struct coords {
     struct frame_struct * page;
@@ -265,8 +265,6 @@ struct named_locator : public named_locator_helper<0, A... >  {
 
 
 
-#define vdef(name) struct name##__innervar *
-#define vname(name) ((struct name##__innervar *)NULL)
 
 template <typename T1, typename T2>
 struct fusion : public T1, public T2 {
@@ -278,7 +276,7 @@ struct fusion : public T1, public T2 {
 };
 
 
-template <typename T1, typename T2, typename L>
+template <typename T1, typename T2>
 struct static_task_data {
     static_task_data() {
 
@@ -297,33 +295,27 @@ struct static_task_data {
 
 };
 
-template <typename T1,typename T2, typename L>
-struct task_data : public T1, public T2 {
-    task_data( L _lambda) :lambda(_lambda) {
-		printf( "Taskdata constructor : %u %u\n", sizeof(T1), sizeof(T2) );
+template <typename T1,typename T2>
+struct task_data_nocontext {
+    task_data_nocontext( int _sc ) : sc(_sc) {
+        printf( "Taskdata_nocontext sc=%d (at %d) constructor : %u %u\n", sc, (intptr_t)&sc-(intptr_t)this,
+                                sizeof(T1), sizeof(T2) );
                 static_data_p = &layout;
-                layout.fn = &exec_lambda;
     }
 
 
-    static void exec_lambda() {
-        struct task_data<T1,T2,L> * t = (struct task_data<T1,T2,L> *) tstar_getcfp();
-        t->lambda();
-    }
-
-
-    struct static_task_data<T1,T2,L> * static_data_p;
+    struct static_task_data<T1,T2> * static_data_p;
+    int sc;
     union {
         struct {
             T1 needs;
             T2 provides;
         };
-        void * args[static_task_data<T1,T2,L>::length];
+        void * args[static_task_data<T1,T2>::length];
     };
 
-    L lambda;
 
-    static static_task_data<T1,T2,L> layout;
+    static static_task_data<T1,T2> layout;
 
     template<typename R, int rank>
     inline R & get() {
@@ -331,7 +323,7 @@ struct task_data : public T1, public T2 {
     }
     template<typename R, typename T>
     inline R & get_byname( T m) {
-        return needs.get_byname( m );
+        return needs.get_byname<R>( m );
     }
 
     template <typename N>
@@ -346,14 +338,69 @@ struct task_data : public T1, public T2 {
 
 };
 
-template <typename T1,typename T2,typename L>
-static_task_data<T1,T2,L> task_data<T1,T2,L>::layout;
+template <typename T1,typename T2, typename L>
+struct task_data : public task_data_nocontext<T1,T2> {
+    task_data(int sc, L _lambda) : task_data_nocontext<T1,T2>(sc), lambda(_lambda) {
+                printf( "Taskdata with context :" " %u\n", sizeof(L) );
+                task_data_nocontext<T1,T2>::layout.fn = &exec_lambda;
+    }
+
+
+    static void exec_lambda() {
+        struct task_data<T1,T2,L> * t = (struct task_data<T1,T2,L> *) tstar_getcfp();
+        t->lambda();
+    }
+
+
+
+    L lambda;
+
+
+};
+
+template <typename T1,typename T2>
+static_task_data<T1,T2> task_data_nocontext<T1,T2>::layout;
 
 
 template <typename T1, typename T2, typename L>
-struct task_data<T1,T2,L> * create_task(L lambda)  {
-    return new task_data<T1,T2,L>(lambda);
+struct task_data<T1,T2,L> * _create_task(int sc, L lambda)  {
+    return new task_data<T1,T2,L>(sc, lambda);
 }
+
+
+
+template  <typename T1, typename T2>
+struct type_provider {
+    typedef task_data_nocontext<T1,T2> cfptype;
+    template <typename R, typename T>
+    static inline R& _get_arg( T d ) {
+        return ((cfptype*)tstar_getcfp())->template get_byname<R>(d);
+    }
+};
+
+#define vdef(name) struct name##__innervar *
+#define vname(name) ((struct name##__innervar *)NULL)
+
+#define get_arg(type, name) tprovider._get_arg<type>(vname(name))
+#define set_arg(task_hdl, name, type, val)\
+do {\
+task_hdl->get_byname<type>(vname(name)) = val;        \
+} while (0);
+
+#define _input(...) named_vector<__VA_ARGS__>
+#define _output(...) named_locator<__VA_ARGS__>
+#define _code(...) __VA_ARGS__
+
+#define TASK(name, sc, T1,T2, BLOCK) \
+auto CONCAT(name,type_provider) = [=] {\
+    return _create_task<T1,T2>( sc, [=]{\
+            type_provider<T1,T2> tprovider;\
+            BLOCK\
+            }\
+        );\
+    };\
+auto name = CONCAT(name,type_provider)();
+
 
 /*
 #define bind( T1, var1, T2, var2 ) do {
@@ -364,25 +411,4 @@ struct task_data<T1,T2,L> * create_task(L lambda)  {
   
 
 } while (0) */
-
-int main() {
-  auto &a = *create_task<named_vector  <vdef(Cat),int>,
-            named_locator <vdef(Mouse),int,vdef(Mom), int> >
-  ([=] { printf("Code.");} ) ;
-    
-  a.get<int,0>() = 3;
-  size_t & off = a.get_offset( vname(Mom) );
-  off = 4;
-
-  auto z = a.layout;
-  int * zp = (int*) &z;
-  for ( int i = 0; i < z.length ; ++i ) {
-	printf( "%d\n", zp[i]) ;
-  }
-
-  printf( "%u %u %d\n", sizeof( a ), sizeof( z ), a.get_offset(vname(Mom)) );
-
-}
-
-
 
