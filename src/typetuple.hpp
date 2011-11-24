@@ -439,7 +439,8 @@ task_hdl->get_byname<type>(vname(name)) = val;        \
     do {\
   size_t & offset =  T1->get_offset(vname(var1));\
   struct frame_struct * &target  = T1->get_framep(vname(var1));\
-  offset = T2->get_byname<type>( vname(var2) );\
+  offset = ((intptr_t)&(T2->get_byname<type>( vname(var2) )) - (intptr_t)T2);\
+  target = (struct frame_struct *) T2;\
 } while (0)
 
 #define bind_outout(T1, var1, nameloc )\
