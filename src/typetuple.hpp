@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <delegator.hpp>
 
 #define _round_toptrsize(val) ((val)%sizeof(intptr_t)==0?(val):(val)-((val)%sizeof(intptr_t)) + sizeof(intptr_t))
 
+#define CONCAT(A,B) A##B
 
 struct coords {
     struct frame_struct * page;
@@ -219,12 +219,10 @@ struct named_locator_helper<pos,N, T> {
 
   char buffer[pos+_round_toptrsize(sizeof(coords))];
 
-  template <typename R>
   inline frame_struct * & get_framep( N d ) {
     return (*( coords*) get_pos(pos)).page;
   }
 
-  template <typename R>
   inline size_t & get_offset( N d ) {
     return (*( coords*) get_pos(pos)).offset;
   }
@@ -239,14 +237,14 @@ template <int pos, typename N, typename T, typename ...A>
 struct named_locator_helper<pos, N,T, A...> : public named_locator_helper<pos+_round_toptrsize(sizeof(coords)), A...> {
 
 
-  using named_locator_helper<pos+_round_toptrsize(sizeof(coords)), A...>::get_framep;
-  template <typename R>
+    using named_locator_helper<pos+_round_toptrsize(sizeof(coords)), A...>::get_framep;
+    using named_locator_helper<pos+_round_toptrsize(sizeof(coords)), A...>::get_offset;
+
   inline frame_struct * & get_framep( N d ) {
     return (*( coords*) get_pos(pos)).page;
   }
 
-  using named_locator_helper<pos+_round_toptrsize(sizeof(coords)), A...>::get_offset;
-  template <typename R>
+
   inline size_t & get_offset( N d ) {
     return (*( coords*) get_pos(pos)).offset;
   }
@@ -259,15 +257,14 @@ struct named_locator_helper<pos, N,T, A...> : public named_locator_helper<pos+_r
 
 template <typename ...A>
 struct named_locator : public named_locator_helper<0, A... >  {
-	typedef locator_layout_descriptor<A...> layout;
+
+        typedef locator_layout_descriptor<A...> layout;
 	static const int length = sizeof...(A)/2;
 };
 
 
 
 
-#define vdef(name) struct name##__innervar *
-#define vname(name) ((struct name##__innervar *)NULL)
 
 template <typename T1, typename T2>
 struct fusion : public T1, public T2 {
@@ -287,7 +284,6 @@ struct static_task_data {
 
     void (*fn)();
     int nargs;
-    static const int length = T1::length + T2::length;
     typedef fusion<typename T1::layout, typename T2::layout> layout_type;
 
     union {
@@ -295,36 +291,115 @@ struct static_task_data {
         intptr_t elements[layout_type::length];
     };
 
+    static const int length = T1::length + T2::length;
+
+};
+
+template <typename T1,typename T2>
+struct task_data_nocontext {
+    task_data_nocontext( int _sc ) : sc(_sc) {
+        printf( "Taskdata_nocontext sc=%d (at %d) constructor : %u %u\n", sc, (intptr_t)&sc-(intptr_t)this,
+                                sizeof(T1), sizeof(T2) );
+                static_data_p = &layout;
+    }
+
+
+    struct static_task_data<T1,T2> * static_data_p;
+    int sc;
+    union {
+        struct {
+            T1 needs;
+            T2 provides;
+        };
+        void * args[static_task_data<T1,T2>::length];
+    };
+
+
+    static static_task_data<T1,T2> layout;
+
+    template<typename R, int rank>
+    inline R & get() {
+        return needs.get<R,rank>();
+    }
+    template<typename R, typename T>
+    inline R & get_byname( T m) {
+        return needs.get_byname<R>( m );
+    }
+
+    template <typename N>
+    inline frame_struct * & get_framep( N d ) {
+        return provides.get_framep( d );
+    }
+
+    template <typename N>
+    inline size_t & get_offset( N d ) {
+        return provides.get_offset( d );
+    }
+
 };
 
 template <typename T1,typename T2, typename L>
-struct task_data : public T1, public T2 {
-   task_data() : T1(), T2() {
-		printf( "Taskdata constructor : %u %u\n", sizeof(T1), sizeof(T2) );
-                static_data_p = &layout;
-                layout.fn = &exec_lambda;
+struct task_data : public task_data_nocontext<T1,T2> {
+    task_data(int sc, L _lambda) : task_data_nocontext<T1,T2>(sc), lambda(_lambda) {
+                printf( "Taskdata with context :" " %u\n", sizeof(L) );
+                task_data_nocontext<T1,T2>::layout.fn = &exec_lambda;
     }
 
-    L lambda;
 
     static void exec_lambda() {
         struct task_data<T1,T2,L> * t = (struct task_data<T1,T2,L> *) tstar_getcfp();
         t->lambda();
     }
 
-    struct static_task_data<T1,T2> * static_data_p;
-    static static_task_data<T1,T2> layout;
 
-    typedef T1 needs;
-    typedef T2 provides;
 
-    using needs::get;
-    using needs::get_byname;
-    using provides::get_offset;
+    L lambda;
+
+
 };
-template <typename T1,typename T2,typename L>
-static_task_data<T1,T2> task_data<T1,T2,L>::layout;
 
+template <typename T1,typename T2>
+static_task_data<T1,T2> task_data_nocontext<T1,T2>::layout;
+
+
+template <typename T1, typename T2, typename L>
+struct task_data<T1,T2,L> * _create_task(int sc, L lambda)  {
+    return new task_data<T1,T2,L>(sc, lambda);
+}
+
+
+
+template  <typename T1, typename T2>
+struct type_provider {
+    typedef task_data_nocontext<T1,T2> cfptype;
+    template <typename R, typename T>
+    static inline R& _get_arg( T d ) {
+        return ((cfptype*)tstar_getcfp())->template get_byname<R>(d);
+    }
+};
+
+#define vdef(name) struct name##__innervar *
+#define vname(name) ((struct name##__innervar *)NULL)
+
+#define get_arg(type, name) tprovider._get_arg<type>(vname(name))
+#define set_arg(task_hdl, name, type, val)\
+do {\
+task_hdl->get_byname<type>(vname(name)) = val;        \
+} while (0);
+
+#define _input(...) named_vector<__VA_ARGS__>
+#define _output(...) named_locator<__VA_ARGS__>
+#define _code(...) __VA_ARGS__
+
+#define TASK(name, sc, T1,T2, BLOCK) \
+auto CONCAT(name,type_provider) = [=] {\
+    return _create_task<T1,T2>( sc, [=]{\
+            type_provider<T1,T2> tprovider;\
+            BLOCK\
+            }\
+        );\
+    };\
+auto name = CONCAT(name,type_provider)();
 
 
 /*
@@ -336,23 +411,4 @@ static_task_data<T1,T2> task_data<T1,T2,L>::layout;
   
 
 } while (0) */
-
-int main() {
-    task_data<named_vector<vdef(Cat),int>,named_locator<vdef(Mouse),int,vdef(Mom), int>, >a;
-    
-  a.needs::get<int,0>() = 3;
-  size_t & off = a.get_offset<size_t>( vname(Mom) );
-  off = 4;
-
-  auto z = a.layout;
-  int * zp = (int*) &z;
-  for ( int i = 0; i < z.length ; ++i ) {
-	printf( "%d\n", zp[i]) ;
-  }
-
-  printf( "%u %u %d\n", sizeof( a ), sizeof( z ), a.get_offset<int>(vname(Mom)) );
-
-}
-
-
 
