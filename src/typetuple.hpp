@@ -62,8 +62,9 @@ struct locator_layout_descriptor_helper<pos, N,T, A...> {
   locator_layout_descriptor_helper<pos+_round_toptrsize(sizeof(coords)), A...> inner;
   
   locator_layout_descriptor_helper() : inner() {
-	int & dyntype = *(int*)get_pos(pos);
-	dyntype = layout_type_to_data::get_dyn_type( (T*) NULL );
+        int * dyntype = (int*)get_pos(pos);
+        dyntype[0] = layout_type_to_data::get_dyn_type( (struct wo_frame *) NULL  );
+        dyntype[1] = layout_type_to_data::get_dyn_type( (char *) NULL );
 	printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
   }
 
@@ -120,6 +121,11 @@ struct layout_descriptor : public layout_descriptor_helper<0, A... >  {
   layout_descriptor() : layout_descriptor_helper<0,A...>()  {
   } 
   static const int length = sizeof...(A)/2;
+};
+
+template <>
+struct layout_descriptor<> {
+    static const int length = 0;
 };
 
 /* Named Vector Typechecker (only for sequential get accesses) */
@@ -200,11 +206,19 @@ struct named_vector_helper<pos, N,T, A...> : public named_vector_helper<pos+_rou
   }
 };
 
+
+
 template <typename ...A>
 struct named_vector : public named_vector_helper<0, A... >  {
   typedef layout_descriptor<A...> layout;
   static const int length = sizeof...(A)/2;
 
+};
+
+template <>
+struct named_vector<> {
+    typedef layout_descriptor<> layout;
+    static const int length = 0;
 };
 
 /**** Named Locator *****/
@@ -278,7 +292,7 @@ struct fusion : public T1, public T2 {
 
 template <typename T1, typename T2>
 struct static_task_data {
-    static_task_data() {
+    static_task_data() : layout() {
 
     }
 
@@ -338,16 +352,20 @@ struct task_data_nocontext {
 
 };
 
-template <typename T1,typename T2, typename L>
-struct task_data : public task_data_nocontext<T1,T2> {
-    task_data(int sc, L _lambda) : task_data_nocontext<T1,T2>(sc), lambda(_lambda) {
+template <typename T1,typename T2>
+static_task_data<T1,T2> task_data_nocontext<T1,T2>::layout;
+
+
+template <typename T1, typename L>
+struct task_data : public T1 {
+    task_data(int sc, L _lambda) : T1(sc), lambda(_lambda) {
                 printf( "Taskdata with context :" " %u\n", sizeof(L) );
-                task_data_nocontext<T1,T2>::layout.fn = &exec_lambda;
+                T1::layout.fn = &exec_lambda;
     }
 
 
     static void exec_lambda() {
-        struct task_data<T1,T2,L> * t = (struct task_data<T1,T2,L> *) tstar_getcfp();
+        struct task_data<T1,L> * t = (struct task_data<T1,L> *) tstar_getcfp();
         t->lambda();
     }
 
@@ -358,30 +376,42 @@ struct task_data : public task_data_nocontext<T1,T2> {
 
 };
 
-template <typename T1,typename T2>
-static_task_data<T1,T2> task_data_nocontext<T1,T2>::layout;
 
 
-template <typename T1, typename T2, typename L>
-struct task_data<T1,T2,L> * _create_task(int sc, L lambda)  {
-    return new task_data<T1,T2,L>(sc, lambda);
+template <typename T1, typename L>
+struct task_data<T1,L> * _create_task(int sc, L lambda)  {
+    return new task_data<T1,L>(sc, lambda);
 }
 
 
 
-template  <typename T1, typename T2>
+template  <typename CT>
 struct type_provider {
-    typedef task_data_nocontext<T1,T2> cfptype;
+    //typedef task_data_nocontext<T1,T2> cfptype;
+    typedef CT cfptype;
     template <typename R, typename T>
     static inline R& _get_arg( T d ) {
         return ((cfptype*)tstar_getcfp())->template get_byname<R>(d);
+    }
+
+    template <typename N>
+    inline frame_struct * & _get_framep( N d ) {
+        return ((cfptype*)tstar_getcfp())->template get_framep( d );
+    }
+
+    template <typename N>
+    inline size_t & _get_offset( N d ) {
+        return ((cfptype*)tstar_getcfp())->template get_offset( d );
     }
 };
 
 #define vdef(name) struct name##__innervar *
 #define vname(name) ((struct name##__innervar *)NULL)
 
-#define get_arg(type, name) tprovider._get_arg<type>(vname(name))
+#define get_arg(name, type ) tprovider._get_arg<type>(vname(name))
+#define get_off(name) tprovider._get_offset(vname(name))
+#define get_fra(name) tprovider._get_framep(vname(name))
+
 #define set_arg(task_hdl, name, type, val)\
 do {\
 task_hdl->get_byname<type>(vname(name)) = val;        \
@@ -391,24 +421,41 @@ task_hdl->get_byname<type>(vname(name)) = val;        \
 #define _output(...) named_locator<__VA_ARGS__>
 #define _code(...) __VA_ARGS__
 
-#define TASK(name, sc, T1,T2, BLOCK) \
-auto CONCAT(name,type_provider) = [=] {\
-    return _create_task<T1,T2>( sc, [=]{\
-            type_provider<T1,T2> tprovider;\
+#define THANDLE(T1,T2) task_data_nocontext<T1,T2>
+
+#define TASK(sc, taskhandle, BLOCK) \
+ ([=] {\
+    return _create_task<taskhandle>( sc, [=]{\
+            type_provider<taskhandle> tprovider;\
             BLOCK\
             }\
         );\
-    };\
-auto name = CONCAT(name,type_provider)();
+    } )()\
 
 
-/*
-#define bind( T1, var1, T2, var2 ) do {
-  size_t & offset =  T1.get_offset(vname(var1));
-  struct frame_struct * &target  = T1.get_framep(vname(var1));
 
-  offset = T2.get_byname( vname(var1) );
-  
 
-} while (0) */
+#define bind( T1, var1, T2, var2, type ) \
+    do {\
+  size_t & offset =  T1->get_offset(vname(var1));\
+  struct frame_struct * &target  = T1->get_framep(vname(var1));\
+  offset = T2->get_byname<type>( vname(var2) );\
+} while (0)
+
+#define bind_outout(T1, var1, nameloc )\
+ do {\
+    size_t & offset =  T1->get_offset(vname(var1));\
+    struct frame_struct * &target  = T1->get_framep(vname(var1));\
+    offset = get_off( nameloc );\
+    target = get_fra( nameloc );\
+ } while ( 0 )
+
+
+#define provide( name, type, value )\
+     do {\
+    type &ref = *(type*) ((intptr_t)get_fra(name)+(intptr_t) get_off(name) );\
+    ref = value;\
+    tstar_tdec( get_fra(name), NULL );\
+    } while(0)\
+
 
