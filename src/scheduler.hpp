@@ -90,7 +90,7 @@ public :
 
     // This yields to the inner scheduler.
     static void schedule_inner( struct frame_struct * page );
-
+    void steal_and_process();
 
     // This method returns an array of stolen tasks.
     // buffer is an output buffer, supposed big enough.

@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <frame.hpp>
+#include <misc.h>
 
 #define _round_toptrsize(val) ((val)%sizeof(intptr_t)==0?(val):(val)-((val)%sizeof(intptr_t)) + sizeof(intptr_t))
 
@@ -14,19 +16,19 @@ struct coords {
 
 struct layout_type_to_data {
   static int get_dyn_type( struct fat_pointer_buffer * n ) {
-	return 3;
+        return FATP_TYPE;
   }
 
   static int get_dyn_type( struct wo_frame * n ) {
-	return 4;
+        return W_FRAME_TYPE;
   }
 
   static int get_dyn_type( struct ro_frame * n ) {
-	return 5;
+        return R_FRAME_TYPE;
   }
 
   static int get_dyn_type( struct rw_frame * n ) {
-	return 6;
+        return RW_FRAME_TYPE;
   }
 
   template <typename T>
@@ -48,7 +50,7 @@ struct locator_layout_descriptor_helper<pos,N, T> {
 	int * dtp = (int*)get_pos(pos);
 	dtp[0] = layout_type_to_data::get_dyn_type( (struct wo_frame *) NULL );
 	dtp[1] = layout_type_to_data::get_dyn_type( (char *) NULL );
-	printf( "Layout set elt at pos %d : %d, and %d\n", pos, dtp[0],dtp[1] );
+        //printf( "Layout set elt at pos %d : %d, and %d\n", pos, dtp[0],dtp[1] );
   }
 
 
@@ -65,13 +67,18 @@ struct locator_layout_descriptor_helper<pos, N,T, A...> {
         int * dyntype = (int*)get_pos(pos);
         dyntype[0] = layout_type_to_data::get_dyn_type( (struct wo_frame *) NULL  );
         dyntype[1] = layout_type_to_data::get_dyn_type( (char *) NULL );
-	printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
+        //printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
   }
 
 
   inline void * get_pos( int rpos ) {
   	return inner.get_pos(rpos);
   }
+};
+
+template <>
+struct locator_layout_descriptor_helper<0> {
+
 };
 
 template <typename ...A>
@@ -91,7 +98,7 @@ struct layout_descriptor_helper<pos,N, T> {
   layout_descriptor_helper() {
 	int & dyntype = *(int*)get_pos(pos);
 	dyntype = layout_type_to_data::get_dyn_type( (T*) NULL );
-	printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
+        //printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
   }
 
 
@@ -107,7 +114,7 @@ struct layout_descriptor_helper<pos, N,T, A...> {
   layout_descriptor_helper() : inner() {
 	int & dyntype = *(int*)get_pos(pos);
 	dyntype = layout_type_to_data::get_dyn_type( (T*) NULL );
-	printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
+        //printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
   }
 
 
@@ -269,6 +276,11 @@ struct named_locator_helper<pos, N,T, A...> : public named_locator_helper<pos+_r
   }
 };
 
+template <>
+struct named_locator_helper<0> {
+
+};
+
 template <typename ...A>
 struct named_locator : public named_locator_helper<0, A... >  {
 
@@ -280,10 +292,13 @@ struct named_locator : public named_locator_helper<0, A... >  {
 
 
 
+
+
+
 template <typename T1, typename T2>
 struct fusion : public T1, public T2 {
   fusion() : T1(), T2() {
-	printf( "Fusion constructor.\n");  
+        //printf( "Fusion constructor.\n");
   }
 
   static const int length = T1::length + T2::length;
@@ -312,8 +327,8 @@ struct static_task_data {
 template <typename T1,typename T2>
 struct task_data_nocontext {
     task_data_nocontext( int _sc ) : sc(_sc) {
-        printf( "Taskdata_nocontext sc=%d (at %d) constructor : %u %u\n", sc, (intptr_t)&sc-(intptr_t)this,
-                                sizeof(T1), sizeof(T2) );
+        //printf( "Taskdata_nocontext sc=%d (at %d) constructor : %u %u\n", sc, (intptr_t)&sc-(intptr_t)this,
+        //                        sizeof(T1), sizeof(T2) );
                 static_data_p = &layout;
     }
 
@@ -336,7 +351,7 @@ struct task_data_nocontext {
         return needs.get<R,rank>();
     }
     template<typename R, typename T>
-    inline R & get_byname( T m) {
+    inline R & get_byname( T m, R * p) {
         return needs.get_byname<R>( m );
     }
 
@@ -359,7 +374,7 @@ static_task_data<T1,T2> task_data_nocontext<T1,T2>::layout;
 template <typename T1, typename L>
 struct task_data : public T1 {
     task_data(int sc, L _lambda) : T1(sc), lambda(_lambda) {
-                printf( "Taskdata with context :" " %u\n", sizeof(L) );
+                //printf( "Taskdata with context :" " %u\n", sizeof(L) );
                 T1::layout.fn = &exec_lambda;
     }
 
@@ -380,7 +395,8 @@ struct task_data : public T1 {
 
 template <typename T1, typename L>
 struct task_data<T1,L> * _create_task(int sc, L lambda)  {
-    return new task_data<T1,L>(sc, lambda);
+    size_t size = sizeof( task_data<T1,L>);
+    return new( owm_malloc(size) ) task_data<T1,L>(sc, lambda);
 }
 
 
@@ -390,8 +406,8 @@ struct type_provider {
     //typedef task_data_nocontext<T1,T2> cfptype;
     typedef CT cfptype;
     template <typename R, typename T>
-    static inline R& _get_arg( T d ) {
-        return ((cfptype*)tstar_getcfp())->template get_byname<R>(d);
+    static inline R& _get_arg( T d, R* z ) {
+        return ((cfptype*)tstar_getcfp())->template get_byname(d, (R*) NULL );
     }
 
     template <typename N>
@@ -408,13 +424,13 @@ struct type_provider {
 #define vdef(name) struct name##__innervar *
 #define vname(name) ((struct name##__innervar *)NULL)
 
-#define get_arg(name, type ) tprovider._get_arg<type>(vname(name))
+#define get_arg(name, type ) tprovider._get_arg(vname(name), (type *) NULL )
 #define get_off(name) tprovider._get_offset(vname(name))
 #define get_fra(name) tprovider._get_framep(vname(name))
 
 #define set_arg(task_hdl, name, type, val)\
 do {\
-task_hdl->get_byname<type>(vname(name)) = val;        \
+task_hdl->get_byname(vname(name), (type*) NULL) = val;        \
 } while (0);
 
 #define _input(...) named_vector<__VA_ARGS__>
@@ -439,7 +455,7 @@ task_hdl->get_byname<type>(vname(name)) = val;        \
     do {\
   size_t & offset =  T1->get_offset(vname(var1));\
   struct frame_struct * &target  = T1->get_framep(vname(var1));\
-  offset = ((intptr_t)&(T2->get_byname<type>( vname(var2) )) - (intptr_t)T2);\
+    offset = ((intptr_t)&(T2->get_byname( vname(var2), (type *)NULL )) - (intptr_t)T2);\
   target = (struct frame_struct *) T2;\
 } while (0)
 

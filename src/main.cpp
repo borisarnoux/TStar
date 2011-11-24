@@ -11,6 +11,9 @@
 
 #include <string.h>
 
+
+#include <typetuple.hpp>
+
 #ifdef __x86_64
 #define ZONE_START 0x70ef55b44000
 #else
@@ -311,6 +314,50 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
 
 
 
+typedef THANDLE( _input( vdef(X), int ), _output() ) hello_task;
+
+int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
+
+
+    // Create a network interface, embedding parameters ( here MPI )
+    NetworkInterface ni;
+    ni.init(&argc, &argv);
+
+
+    // Setup address space.
+    mapper_initialize_address_space((void*)ZONE_START, 0x4000, get_num_nodes());
+
+    // Creates a scheduler :
+    Scheduler *s = new Scheduler;
+    Delegator d;
+
+    hello_task * htp = TASK( 1, hello_task,
+                             _code (
+                                 printf( "Hello %d!!\n", get_arg(X,int) );
+                                 )
+                             );
+
+    if ( get_node_num() == 0 ) {
+#pragma omp parallel
+{
+        #pragma omp single
+        s->schedule_inner( (struct frame_struct *)htp);
+}
+    } else {
+#pragma omp parallel
+{
+ #pragma omp single
+{
+        DELEGATE( d, s->steal_and_process(); );
+}
+}
+    }
+
+
+    ni.finalize();
+
+    return 0;
+}
 
 int main( int argc, char ** argv ) {
 #ifdef BUILD_TEST1
@@ -326,5 +373,9 @@ int main( int argc, char ** argv ) {
 #endif
 #ifdef BUILD_TEST4
            tstar_main_test4(argc, argv, NULL );
+#endif
+
+#ifdef BUILD_TEST5
+           tstar_main_test5(argc, argv, NULL );
 #endif
        }

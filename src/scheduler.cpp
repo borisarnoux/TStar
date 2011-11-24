@@ -317,6 +317,33 @@ int Scheduler::steal_tasks( struct frame_struct ** buffer, int amount ) {
     return amount;
 }
 
+void Scheduler::steal_and_process() {
+    int initial_target = rand()%get_num_nodes();
+    int target = initial_target;
+    for (;;) {
+
+                struct frame_struct * buffer[10];
+                int amount = 0;
+
+                while ( (amount = steal_tasks(buffer, 10)) == 0 ) {
+                      target = ( target + 1)%get_num_nodes();
+                      if ( target == initial_target ) {
+                          goto endd;
+                      }
+                }
+
+                for ( int i = 0; i < amount; ++i ) {
+                    schedule_global(buffer[i]);
+                }
+
+    }
+
+endd:
+    return;
+
+}
+
+
 int Scheduler::get_refund( int amount ) {
     delegator_only();
 
