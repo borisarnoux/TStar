@@ -33,7 +33,7 @@ int tstar_main_test1(int argc, char ** argv, struct frame_struct* first_task) {
        mapper_initialize_address_space((void*)0x07000000, 0x4000, total_nodes);
 
        // Creates a scheduler :
-       Scheduler s;
+       Scheduler s(ni);
 
        if ( get_node_num() == 0 ) {
            char * s = (char*) owm_malloc(40);
@@ -79,7 +79,7 @@ int tstar_main_test2(int argc, char ** argv, struct frame_struct* first_task) {
        mapper_initialize_address_space((void*)ZONE_START, 0x4000, total_nodes);
 
        // Creates a scheduler :
-       Scheduler s;
+       Scheduler s(ni);
 
        if ( get_node_num() == 0 ) {
            char * s = (char*) owm_malloc(40);
@@ -147,7 +147,7 @@ int tstar_main_test3(int argc, char ** argv, struct frame_struct* first_task) {
        mapper_initialize_address_space((void*)ZONE_START, 0x4000, total_nodes);
 
        // Creates a scheduler :
-       Scheduler s;
+       Scheduler s(ni);
 
        if ( get_node_num() == 0 ) {
            char * s = (char*) owm_malloc(40);
@@ -231,7 +231,7 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
     mapper_initialize_address_space((void*)ZONE_START, 0x4000, get_num_nodes());
 
     // Creates a scheduler :
-    Scheduler s;
+    Scheduler s(ni);
 
     if ( get_node_num() == 0 ) {
         DEBUG("Starting (%d)/%d",get_node_num(),get_num_nodes());
@@ -314,7 +314,8 @@ int tstar_main_test4(int argc, char ** argv, struct frame_struct* first_task) {
 
 
 
-typedef THANDLE( _input( vdef(X), int ), _output() ) hello_task;
+typedef THANDLE( _input( vdef(X), int, vdef(Buf),struct wo_frame * ), _output(vdef(BufO), struct ro_frame *) ) whello_task;
+typedef THANDLE( _input( vdef(X), int, vdef(Buf),struct ro_frame * ), _output() ) rhello_task;
 
 int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
 
@@ -328,24 +329,45 @@ int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
     mapper_initialize_address_space((void*)ZONE_START, 0x4000, get_num_nodes());
 
     // Creates a scheduler :
-    Scheduler *s = new Scheduler;
+    Scheduler *s = new Scheduler(ni);
     Delegator d;
 
-    hello_task * htp = TASK( 1, hello_task,
+
+
+    // Creates a memory zone :
+    if ( get_node_num() == 0 ) {
+        struct wo_frame * n = (wo_frame*) owm_malloc(40);
+
+
+
+          whello_task * htp = TASK( 1, whello_task,
                              _code (
-                                 printf( "Hello %d!!\n", get_arg(X,int) );
+                                       sprintf( (char*)get_arg(Buf,wo_frame*), "Hello %d!!", get_arg(X,int) );
+                                       provide(BufO, ro_frame*, (ro_frame*)get_arg( Buf,wo_frame*));
                                  )
                              );
+          rhello_task * rht = TASK( 1, rhello_task,
+                                    _code(
+                                        printf( "%s\n", (char*)get_arg(Buf,ro_frame *));
+                                        ));
 
-    if ( get_node_num() == 0 ) {
+          handle_get_arg<wo_frame*>( htp, vname(Buf)) = n;
+          bind(htp, BufO, rht, Buf, ro_frame *);
+
 #pragma omp parallel
 {
-        #pragma omp single
-        s->schedule_inner( (struct frame_struct *)htp);
+            s->tls_init();
+#pragma omp single
+            {
+            DELEGATE(d, s->schedule_global( (struct frame_struct *)htp);
+                        s->steal_and_process();
+                );
+            }
 }
     } else {
 #pragma omp parallel
 {
+         s->tls_init();
  #pragma omp single
 {
         DELEGATE( d, s->steal_and_process(); );

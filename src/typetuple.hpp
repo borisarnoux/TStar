@@ -13,6 +13,9 @@ struct coords {
 };
 
 /**** Layout Descriptor Mapping *****/
+struct wo_frame;
+struct ro_frame;
+struct rw_frame;
 
 struct layout_type_to_data {
   static int get_dyn_type( struct fat_pointer_buffer * n ) {
@@ -428,10 +431,11 @@ struct type_provider {
 #define get_off(name) tprovider._get_offset(vname(name))
 #define get_fra(name) tprovider._get_framep(vname(name))
 
-#define set_arg(task_hdl, name, type, val)\
-do {\
-task_hdl->get_byname(vname(name), (type*) NULL) = val;        \
-} while (0);
+template <typename R,typename T1, typename T2>
+R& handle_get_arg( T1 h, T2 * d ) {
+    return h->get_byname( d, (R *) NULL );
+}
+
 
 #define _input(...) named_vector<__VA_ARGS__>
 #define _output(...) named_locator<__VA_ARGS__>

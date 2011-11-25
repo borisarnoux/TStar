@@ -11,6 +11,7 @@
 #include <data_events.hpp>
 #include <invalidation.hpp>
 #include <delegator.hpp>
+#include <network.hpp>
 
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
@@ -44,34 +45,49 @@ private:
     DWriteMap writes_by_ressource;
     TDecMap tdecs_by_ressource;
     CreatedFramesList created_frames_list;
+    NetworkInterface &ni;
+
 
 public:
+
+    ExecutionUnit(NetworkInterface &_ni) : ni(_ni) {
+
+    }
+
     struct frame_struct * current_cfp;
 
     static __thread ExecutionUnit * local_execution_unit;
 
-    static void executor( struct frame_struct * page );
+    void executor( struct frame_struct * page );
     void tdec( struct frame_struct * page, void * ref );
     void register_write( void * object, void * frame, size_t offset, size_t len );
     void process_commits();
     bool check_ressources();
-    static void before_code();
-    static void after_code();
+    void before_code();
+    void after_code();
 };
 
 
 class Scheduler {
     std::list<struct frame_struct *> external_tasks;
     int global_local_threshold;
-    int task_count;
+    static int task_count;
+    static __thread bool initialized;
+    NetworkInterface &ni;
 
 
 public :
 
-    Scheduler() : global_local_threshold(omp_get_num_threads() * 5 ), task_count(0) {
+    Scheduler(NetworkInterface &_ni) : global_local_threshold(omp_get_num_threads() * 5 ),ni(_ni) {
+
+    }
+
+    void tls_init() {
         if ( ExecutionUnit::local_execution_unit == NULL )  {
-            ExecutionUnit::local_execution_unit = new ExecutionUnit;
+            ExecutionUnit::local_execution_unit = new ExecutionUnit(ni);
+
         }
+        initialized = true;
     }
 
     // This is the entry point, should be attained when SC reaches 0.
@@ -89,7 +105,7 @@ public :
 
 
     // This yields to the inner scheduler.
-    static void schedule_inner( struct frame_struct * page );
+    void schedule_inner( struct frame_struct * page );
     void steal_and_process();
 
     // This method returns an array of stolen tasks.

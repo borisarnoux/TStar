@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <omp.h>
 #include <list>
 #include <map>
@@ -14,6 +16,7 @@
 
 
 
+int Scheduler::task_count = 0;
 
 
 
@@ -27,7 +30,7 @@ void ExecutionUnit::executor( struct frame_struct * page ) {
         // This, while not being strictly speaking a mistake, shouldn't happen.
         FATAL( "Execution of invalid page" );
     }
-
+    DEBUG( "%p %p %p", local_execution_unit, local_execution_unit, page );
     local_execution_unit->before_code();
     page->static_data->fn();
     local_execution_unit->after_code();
@@ -49,8 +52,11 @@ void ExecutionUnit::register_write( void * object, void * frame, size_t offset, 
 
 void ExecutionUnit::process_commits() {
     // For each registered ressource
+
     ressource_desc d;
     int nargs = current_cfp->static_data->nargs;
+
+    DEBUG( "ExecutionUnit : Processing Commits -- Task : %p", current_cfp);
     for ( int i = 0; i < nargs; ++i ) {
         long & current_type = current_cfp->static_data->arg_types[i];
         if (  current_type == DATA_TYPE || current_type == R_FRAME_TYPE ) {
@@ -93,6 +99,7 @@ void ExecutionUnit::process_commits() {
 
         // Then come the special case where there are no writes.
         if ( frame_dwrites.empty() ) {
+            DEBUG ("Ressource %p, no writes, invalidation & TDecs to do.", current_value);
             // Commits the tdecs immediately after invalidation :
 
             if ( current_type == FATP_TYPE ) {
@@ -192,18 +199,23 @@ void ExecutionUnit::after_code() {
     // Process commits.
     // and/or free zones written.
     // Process fat pointers refecence counters.
+    local_execution_unit->process_commits();
+    NetworkInterface *nip = &local_execution_unit->ni;
+    DELEGATE( Delegator::default_delegator, nip->process_messages(); );
 }
 
 
 __thread ExecutionUnit * ExecutionUnit::local_execution_unit = NULL;
+__thread bool Scheduler::initialized = false;
 
 
 // This is the entry point, should be attained when SC reaches 0.
 void Scheduler::schedule_global( struct frame_struct * page )  {
-
+    CFATAL( ! initialized, "Uninitialized TLS");
     if ( task_count > global_local_threshold ) {
         schedule_external( page );
     } else {
+        task_count ++;
         prepare_ressources( page );
     }
 }
@@ -257,7 +269,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
     }
 
     auto gotoinnersched  = new_Closure( work_count,
-    schedule_inner( page );
+        schedule_inner( page );
     );
 
 
@@ -294,8 +306,12 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
 
 // This yields to the inner scheduler.
 void Scheduler::schedule_inner( struct frame_struct * page ) {
+
 #pragma omp task
-    ExecutionUnit::executor( page );
+    {
+    ExecutionUnit::local_execution_unit->executor( page );
+    task_count --;
+    }
 }
 
 
@@ -335,11 +351,14 @@ void Scheduler::steal_and_process() {
                 for ( int i = 0; i < amount; ++i ) {
                     schedule_global(buffer[i]);
                 }
+                continue;
+    endd:
 
+                usleep(100);
+                ni.process_messages();
     }
 
-endd:
-    return;
+
 
 }
 
