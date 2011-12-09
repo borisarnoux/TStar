@@ -130,14 +130,14 @@ private:
 	  }
 
 	  // Execute the delegation.
-          CFATAL(delegator_flag == 1, "Nested delegators" );
-	  delegator_flag = 1;
+          //CFATAL(delegator_flag == 1, "Nested delegators" );
+          delegator_flag += 1;
           set_current_color(33);
           //DEBUG("[In delegator]");
 	  (*c)();
           //DEBUG( "[Out of delegator]");
           set_current_color(0);
-          delegator_flag = 0;
+          delegator_flag -= 1;
 	}
   }
   

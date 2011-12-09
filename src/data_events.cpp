@@ -3,6 +3,7 @@
 #include <mappable_event.hpp>
 #include <network.hpp>
 #include <mapper.h>
+#include <scheduler.hpp>
 
 struct commit_key_struct {
   bool operator<(const commit_key_struct &other) const {
@@ -261,7 +262,25 @@ void release_rec( fat_pointer_p ptr ) {
 }
 
 void ask_or_do_tdec( void * page ) {
-    FATAL("Not implemented");
+    if ( PAGE_IS_RESP(page) ) {
+        DEBUG("Ask or do TDEC %p : done locally.", page);
+        // Do TDec locally.
+        struct frame_struct * fp = (frame_struct *) page;
+        int sfres =  __sync_sub_and_fetch( &fp->sc, 1 );
+        DEBUG( "TDec comes to : %d", sfres);
+        if ( sfres == 0 ) {
+            Scheduler::global_scheduler->schedule_global(fp);
+        }
+    } else {
+        // Send a message for TDec :
+        DEBUG("Ask or do TDEC %p : sent remotely to %d.", page, PAGE_GET_NEXT_RESP(page));
+
+        NetworkInterface::send_tdec( PAGE_GET_NEXT_RESP(page), page, 1);
+    }
+
+
+
+
 }
 
 

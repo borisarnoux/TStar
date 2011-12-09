@@ -39,7 +39,7 @@ void ExecutionUnit::executor( struct frame_struct * page ) {
 }
 
 void ExecutionUnit::tdec( struct frame_struct * page, void * ref ) {
-    CFATAL( ref==NULL, "Unreferenced tdecs unsupported.");
+    //CFATAL( ref==NULL, "Unreferenced tdecs unsupported.");
     tdecs_by_ressource.insert( TDecMap::value_type(ref,page) );
 }
 
@@ -137,9 +137,7 @@ void ExecutionUnit::process_commits() {
         // Finally, we do the writes :
         for ( auto i = frame_dwrites.begin(); i!=frame_dwrites.end(); ++i) {
             ask_or_do_rwrite_then(current_value, i->offset, i->len, on_write_commits);
-
         }
-
 
     }
 
@@ -153,10 +151,11 @@ void ExecutionUnit::process_commits() {
         // Anonymous TDecs : not implemented.
         // - one option is to make them depend on nothing.
         // - another is to make them depend on everything.
-        FATAL( "Anonymous tdecs unsupported");
+        // FATAL( "Unreferenced tdecs unsupported");
+        // Here we choose immediate TDec.
         ask_or_do_tdec(i->second);
     }
-
+    tdecs_by_ressource.clear();
 
 
 }
@@ -207,6 +206,7 @@ void ExecutionUnit::after_code() {
 
 __thread ExecutionUnit * ExecutionUnit::local_execution_unit = NULL;
 __thread bool Scheduler::initialized = false;
+Scheduler * Scheduler::global_scheduler = NULL;
 
 
 // This is the entry point, should be attained when SC reaches 0.
@@ -216,7 +216,7 @@ void Scheduler::schedule_global( struct frame_struct * page )  {
         schedule_external( page );
     } else {
         task_count ++;
-        prepare_ressources( page );
+        DELEGATE( Delegator::default_delegator, this->prepare_ressources( page ); );
     }
 }
 

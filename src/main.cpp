@@ -336,7 +336,7 @@ int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
 
     // Creates a memory zone :
     if ( get_node_num() == 0 ) {
-        struct wo_frame * n = (wo_frame*) owm_malloc(40);
+        struct wo_frame * owm_pointer = (wo_frame*) owm_malloc(40);
 
 
 
@@ -351,7 +351,7 @@ int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
                                         printf( "%s\n", (char*)get_arg(Buf,ro_frame *));
                                         ));
 
-          handle_get_arg<wo_frame*>( htp, vname(Buf)) = n;
+          handle_get_arg<wo_frame*>( htp, vname(Buf)) = owm_pointer;
           bind(htp, BufO, rht, Buf, ro_frame *);
 
 #pragma omp parallel

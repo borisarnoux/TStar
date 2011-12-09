@@ -77,9 +77,11 @@ class Scheduler {
 
 
 public :
+    static Scheduler * global_scheduler;
 
     Scheduler(NetworkInterface &_ni) : global_local_threshold(omp_get_num_threads() * 5 ),ni(_ni) {
-
+        CFATAL( global_scheduler != NULL, "Cannot run two schedulers.");
+        global_scheduler = this;
     }
 
     void tls_init() {

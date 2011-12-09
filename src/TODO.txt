@@ -2,3 +2,5 @@
 * Make sure the frames for writing consistently increase and decrease the use counter.
 * We are checking relationships of tdecs with arguments, but not with created frames.
 * When the RESP_TRANSFER occur, do the incrementations of use count in the triggered closures.
+
+* IMPORTANT : Resp transfer & deadlock...
