@@ -144,7 +144,7 @@ void ExecutionUnit::process_commits() {
     // If there are writes remaining : error.
     CFATAL( !writes_by_ressource.empty(), "A write was associated with an unknown argument (check frame/objects)");
     // If there are TDecs left, it is ok:
-    for ( auto i = tdecs_by_ressource.begin(); i!= tdecs_by_ressource.end();++i) {
+    for ( auto i = tdecs_by_ressource.begin(); i!= tdecs_by_ressource.end(); ++i) {
         if ( i->first != NULL ) {
             FATAL( "Non null tdec reference associated with unknown frame.");
         }
@@ -167,8 +167,7 @@ bool ExecutionUnit::check_ressources() {
           ++i ) {
         switch( current_cfp->static_data->arg_types[i] ) {
         case R_FRAME_TYPE:
-            // no need to check because data is new
-            // enough by construction.
+            // no need to check because data is new enough by construction.
             break;
         case RW_FRAME_TYPE:
             // Need to check if data is in RESP mode and has
