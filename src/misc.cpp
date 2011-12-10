@@ -2,7 +2,7 @@
 #include <misc.h>
 
 extern "C" {
-    int current_color = 0;
+    __thread int current_color = 0;
 
 
 

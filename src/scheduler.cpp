@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <omp.h>
 #include <list>
 #include <map>
@@ -14,6 +16,7 @@
 
 
 
+int Scheduler::task_count = 0;
 
 
 
@@ -27,7 +30,7 @@ void ExecutionUnit::executor( struct frame_struct * page ) {
         // This, while not being strictly speaking a mistake, shouldn't happen.
         FATAL( "Execution of invalid page" );
     }
-
+    DEBUG( "%p %p %p", local_execution_unit, local_execution_unit, page );
     local_execution_unit->before_code();
     page->static_data->fn();
     local_execution_unit->after_code();
@@ -36,7 +39,7 @@ void ExecutionUnit::executor( struct frame_struct * page ) {
 }
 
 void ExecutionUnit::tdec( struct frame_struct * page, void * ref ) {
-    CFATAL( ref==NULL, "Unreferenced tdecs unsupported.");
+    //CFATAL( ref==NULL, "Unreferenced tdecs unsupported.");
     tdecs_by_ressource.insert( TDecMap::value_type(ref,page) );
 }
 
@@ -49,8 +52,11 @@ void ExecutionUnit::register_write( void * object, void * frame, size_t offset, 
 
 void ExecutionUnit::process_commits() {
     // For each registered ressource
+
     ressource_desc d;
     int nargs = current_cfp->static_data->nargs;
+
+    DEBUG( "ExecutionUnit : Processing Commits -- Task : %p", current_cfp);
     for ( int i = 0; i < nargs; ++i ) {
         long & current_type = current_cfp->static_data->arg_types[i];
         if (  current_type == DATA_TYPE || current_type == R_FRAME_TYPE ) {
@@ -93,6 +99,7 @@ void ExecutionUnit::process_commits() {
 
         // Then come the special case where there are no writes.
         if ( frame_dwrites.empty() ) {
+            DEBUG ("Ressource %p, no writes, invalidation & TDecs to do.", current_value);
             // Commits the tdecs immediately after invalidation :
 
             if ( current_type == FATP_TYPE ) {
@@ -130,26 +137,25 @@ void ExecutionUnit::process_commits() {
         // Finally, we do the writes :
         for ( auto i = frame_dwrites.begin(); i!=frame_dwrites.end(); ++i) {
             ask_or_do_rwrite_then(current_value, i->offset, i->len, on_write_commits);
-
         }
-
 
     }
 
     // If there are writes remaining : error.
     CFATAL( !writes_by_ressource.empty(), "A write was associated with an unknown argument (check frame/objects)");
     // If there are TDecs left, it is ok:
-    for ( auto i = tdecs_by_ressource.begin(); i!= tdecs_by_ressource.end();++i) {
+    for ( auto i = tdecs_by_ressource.begin(); i!= tdecs_by_ressource.end(); ++i) {
         if ( i->first != NULL ) {
             FATAL( "Non null tdec reference associated with unknown frame.");
         }
         // Anonymous TDecs : not implemented.
         // - one option is to make them depend on nothing.
         // - another is to make them depend on everything.
-        FATAL( "Anonymous tdecs unsupported");
+        // FATAL( "Unreferenced tdecs unsupported");
+        // Here we choose immediate TDec.
         ask_or_do_tdec(i->second);
     }
-
+    tdecs_by_ressource.clear();
 
 
 }
@@ -161,8 +167,7 @@ bool ExecutionUnit::check_ressources() {
           ++i ) {
         switch( current_cfp->static_data->arg_types[i] ) {
         case R_FRAME_TYPE:
-            // no need to check because data is new
-            // enough by construction.
+            // no need to check because data is new enough by construction.
             break;
         case RW_FRAME_TYPE:
             // Need to check if data is in RESP mode and has
@@ -192,19 +197,25 @@ void ExecutionUnit::after_code() {
     // Process commits.
     // and/or free zones written.
     // Process fat pointers refecence counters.
+    local_execution_unit->process_commits();
+    NetworkInterface *nip = &local_execution_unit->ni;
+    DELEGATE( Delegator::default_delegator, nip->process_messages(); );
 }
 
 
 __thread ExecutionUnit * ExecutionUnit::local_execution_unit = NULL;
+__thread bool Scheduler::initialized = false;
+Scheduler * Scheduler::global_scheduler = NULL;
 
 
 // This is the entry point, should be attained when SC reaches 0.
 void Scheduler::schedule_global( struct frame_struct * page )  {
-
+    CFATAL( ! initialized, "Uninitialized TLS");
     if ( task_count > global_local_threshold ) {
         schedule_external( page );
     } else {
-        prepare_ressources( page );
+        task_count ++;
+        DELEGATE( Delegator::default_delegator, this->prepare_ressources( page ); );
     }
 }
 
@@ -257,7 +268,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
     }
 
     auto gotoinnersched  = new_Closure( work_count,
-    schedule_inner( page );
+        schedule_inner( page );
     );
 
 
@@ -294,8 +305,12 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
 
 // This yields to the inner scheduler.
 void Scheduler::schedule_inner( struct frame_struct * page ) {
+
 #pragma omp task
-    ExecutionUnit::executor( page );
+    {
+    ExecutionUnit::local_execution_unit->executor( page );
+    task_count --;
+    }
 }
 
 
@@ -316,6 +331,36 @@ int Scheduler::steal_tasks( struct frame_struct ** buffer, int amount ) {
     // `Amount` tasks were stolen
     return amount;
 }
+
+void Scheduler::steal_and_process() {
+    int initial_target = rand()%get_num_nodes();
+    int target = initial_target;
+    for (;;) {
+
+                struct frame_struct * buffer[10];
+                int amount = 0;
+
+                while ( (amount = steal_tasks(buffer, 10)) == 0 ) {
+                      target = ( target + 1)%get_num_nodes();
+                      if ( target == initial_target ) {
+                          goto endd;
+                      }
+                }
+
+                for ( int i = 0; i < amount; ++i ) {
+                    schedule_global(buffer[i]);
+                }
+                continue;
+    endd:
+
+                usleep(100);
+                ni.process_messages();
+    }
+
+
+
+}
+
 
 int Scheduler::get_refund( int amount ) {
     delegator_only();

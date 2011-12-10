@@ -8,7 +8,7 @@ void tstar_setup() {
 }
 
 void tstar_tdec( void * target, void * reference ) {
-
+    ExecutionUnit::local_execution_unit->tdec((frame_struct*)target, reference);
 
 }
 

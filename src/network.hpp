@@ -1,3 +1,6 @@
+#ifndef NETWORK_HPP
+#define NETWORK_HPP
+
 #include "mpi.h"
 #include <identifiers.h>
 
@@ -135,4 +138,4 @@ class NetworkInterface : public NetworkLowLevel {
 
 };
 
-
+#endif
