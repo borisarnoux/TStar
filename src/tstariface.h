@@ -21,13 +21,13 @@ struct static_data {
 };
 
 
-void tstar_setup();
+void tstar_setup(int argc, char ** argv);
 void tstar_tdec( void * target, void * reference );
 struct frame_struct * tstar_tcreate( int sc );
 struct frame_struct * tstar_getcfp();
 void tstar_tend();
 
-
+int tstar_main( struct frame_struct* first_task);
 
 #ifdef __cplusplus
 }

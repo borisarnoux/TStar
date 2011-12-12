@@ -76,6 +76,9 @@ struct TransPtr {
     void * ptr;
 };
 
+struct ExitMessage {
+    int code;
+};
 
 
 void NetworkLowLevel::init( int* argc, char *** argv ) {
@@ -141,6 +144,7 @@ NetworkInterface::NetworkInterface() : NetworkLowLevel() {
       BIND_MT( RWReq );
       BIND_MT( GoTransient );
       BIND_MT( RespTransfer );
+      BIND_MT( ExitMessage );
       /* For debugging purposes */
       BIND_MT( TransPtr );
 
@@ -495,6 +499,13 @@ void NetworkInterface::onTDec( MessageHdr &m ) {
 
 
 }
+void NetworkInterface::onExitMessage( MessageHdr &m ) {
+    DEBUG( "Exit Received");
+    int code = ((ExitMessage*)m.data)->code;
+    MPI_Finalize();
+    exit(code);
+}
+
 
 /*------------ Functions for sending messages---------------------- */
 void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page ) {
@@ -624,6 +635,19 @@ void NetworkInterface::send_rwrite( node_id_t target,
     send(m);
 }
 
+void NetworkInterface::bcast_exit( int code ) {
+    for ( int i = 0; i < get_num_nodes(); ++i ) {
+        ExitMessage em;
+        em.code = code;
+        MessageHdr m;
+        m.data = &em;
+        m.data_size = sizeof(ExitMessage);
+        m.to = i;
+        m.from = get_node_num();
+        m.type = ExitMessageType;
+    }
+
+}
 
 void NetworkInterface::onTransPtr(MessageHdr &msg) {
     dbg_ptr_holder = ((TransPtr*)msg.data)->ptr;
@@ -652,7 +676,13 @@ void NetworkInterface::dbg_send_ptr( node_id_t target, void * ptr ) {
     send( msg );
 }
 
+NetworkInterface::send_steal_tasks(target, 10) {
 
+}
+
+// Wait for reply.
+NetworkInterface::wait_for_stolen_task() {
+}
 
 
 

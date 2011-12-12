@@ -27,126 +27,71 @@
 #define _GNU_SOURCE
 #endif
 
-/* Bug in gcc prevents from using CPP_DEMANGLE in pure "C" */
-#if !defined(__cplusplus) && !defined(NO_CPP_DEMANGLE)
-#define NO_CPP_DEMANGLE
-#endif
+
+#include <execinfo.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ucontext.h>
+#include <unistd.h>
 
 #include <memory.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <signal.h>
-#include <ucontext.h>
+
 #include <dlfcn.h>
-#ifndef NO_CPP_DEMANGLE
-#include <cxxabi.h>
-#ifdef __cplusplus
-using __cxxabiv1::__cxa_demangle;
-#endif
-#endif
+/* This structure mirrors the one found in /usr/include/asm/ucontext.h */
+typedef struct _sig_ucontext {
+ unsigned long     uc_flags;
+ struct ucontext   *uc_link;
+ stack_t           uc_stack;
+ struct sigcontext uc_mcontext;
+ sigset_t          uc_sigmask;
+} sig_ucontext_t;
 
-#include <errno.h>
+void crit_err_hdlr(int sig_num, siginfo_t * info, void * ucontext)
+{
+ void *             array[50];
+ void *             caller_address;
+ char **            messages;
+ int                size, i;
+ sig_ucontext_t *   uc;
 
+ uc = (sig_ucontext_t *)ucontext;
 
-#ifdef HAS_ULSLIB
-#include "uls/logger.h"
-#define sigsegv_outp(x)         sigsegv_outp(,gx)
+#ifdef __x86_64
+#define R_EIP rip
 #else
-#define sigsegv_outp(x, ...)    fprintf(stderr, x "\n", ##__VA_ARGS__)
+#define R_EIP eip
 #endif
 
-#if defined(REG_RIP)
-# define SIGSEGV_STACK_IA64
-# define REGFORMAT "%016lx"
-#elif defined(REG_EIP)
-# define SIGSEGV_STACK_X86
-# define REGFORMAT "%08x"
-#else
-# define SIGSEGV_STACK_GENERIC
-# define REGFORMAT "%x"
-#endif
+ caller_address = (void *) uc->uc_mcontext. R_EIP;
 
-static void signal_segv(int signum, siginfo_t* info, void*ptr) {
-	static const char *si_codes[3] = {"", "SEGV_MAPERR", "SEGV_ACCERR"};
+ fprintf(stderr, "signal %d (%s), address is %p from %p\n",
+  sig_num, strsignal(sig_num), info->si_addr,
+  (void *)caller_address);
 
-	int i, f = 0;
-	ucontext_t *ucontext = (ucontext_t*)ptr;
-	Dl_info dlinfo;
-	void **bp = 0;
-	void *ip = 0;
+ size = backtrace(array, 50);
 
-	sigsegv_outp("Segmentation Fault!");
-	sigsegv_outp("info.si_signo = %d", signum);
-	sigsegv_outp("info.si_errno = %d", info->si_errno);
-	sigsegv_outp("info.si_code  = %d (%s)", info->si_code, si_codes[info->si_code]);
-	sigsegv_outp("info.si_addr  = %p", info->si_addr);
-	for(i = 0; i < NGREG; i++)
-		sigsegv_outp("reg[%02d]       = 0x" REGFORMAT, i, ucontext->uc_mcontext.gregs[i]);
+ /* overwrite sigaction with caller's address */
+ array[1] = caller_address;
 
-#ifndef SIGSEGV_NOSTACK
-#if defined(SIGSEGV_STACK_IA64) || defined(SIGSEGV_STACK_X86)
-#if defined(SIGSEGV_STACK_IA64)
-	ip = (void*)ucontext->uc_mcontext.gregs[REG_RIP];
-	bp = (void**)ucontext->uc_mcontext.gregs[REG_RBP];
-#elif defined(SIGSEGV_STACK_X86)
-	ip = (void*)ucontext->uc_mcontext.gregs[REG_EIP];
-	bp = (void**)ucontext->uc_mcontext.gregs[REG_EBP];
-#endif
+ messages = backtrace_symbols(array, size);
 
-	sigsegv_outp("Stack trace:");
-	while(bp && ip) {
-		if(!dladdr(ip, &dlinfo))
-			break;
+ /* skip first stack frame (points here) */
+ for (i = 1; i < size && messages != NULL; ++i)
+ {
+  fprintf(stderr, "[bt]: (%d) %s\n", i, messages[i]);
+ }
 
-		const char *symname = dlinfo.dli_sname;
+ free(messages);
 
-#ifndef NO_CPP_DEMANGLE
-		int status;
-		char * tmp = __cxa_demangle(symname, NULL, 0, &status);
-
-		if (status == 0 && tmp)
-			symname = tmp;
-#endif
-
-		sigsegv_outp("% 2d: %p <%s+%lu> (%s)",
-				++f,
-				ip,
-				symname,
-				(unsigned long)ip - (unsigned long)dlinfo.dli_saddr,
-				dlinfo.dli_fname);
-
-#ifndef NO_CPP_DEMANGLE
-		if (tmp)
-			free(tmp);
-#endif
-
-		if(dlinfo.dli_sname && !strcmp(dlinfo.dli_sname,"main"))
-			break;
-
-		ip = bp[1];
-		bp = (void**)bp[0];
-	}
-#else
-	sigsegv_outp("Stack trace (non-dedicated):");
-	sz = backtrace(bt, 20);
-	strings = backtrace_symbols(bt, sz);
-	for(i = 0; i < sz; ++i)
-		sigsegv_outp("%s", strings[i]);
-#endif
-	sigsegv_outp("End of stack trace.");
-#else
-	sigsegv_outp("Not printing stack strace.");
-#endif
-        sigsegv_outp("PID : %d", getpid());
-        sleep(200);
-	_exit (-1);
+ exit(EXIT_FAILURE);
 }
 
 static void __attribute__((constructor)) setup_sigsegv() {
 	struct sigaction action;
 	memset(&action, 0, sizeof(action));
-	action.sa_sigaction = signal_segv;
+        action.sa_sigaction = crit_err_hdlr;
 	action.sa_flags = SA_SIGINFO;
 	if(sigaction(SIGSEGV, &action, NULL) < 0)
 		perror("sigaction");

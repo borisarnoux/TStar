@@ -15,6 +15,8 @@
 
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
+#define GLOBAL_LOCAL_THRESHOLD 20
+
 struct TDec {
     struct frame_struct * page;
     void * ref;
@@ -71,15 +73,18 @@ public:
 class Scheduler {
     std::list<struct frame_struct *> external_tasks;
     int global_local_threshold;
-    static int task_count;
     static __thread bool initialized;
     NetworkInterface &ni;
 
 
 public :
+    static int task_count;
+
     static Scheduler * global_scheduler;
 
-    Scheduler(NetworkInterface &_ni) : global_local_threshold(omp_get_num_threads() * 5 ),ni(_ni) {
+    Scheduler(NetworkInterface &_ni) :
+        global_local_threshold(GLOBAL_LOCAL_THRESHOLD),
+        ni(_ni) {
         CFATAL( global_scheduler != NULL, "Cannot run two schedulers.");
         global_scheduler = this;
     }

@@ -24,7 +24,7 @@ enum MessageTypes {
   AckInvalidateType,
 
   TDecType, // Routable
-
+  ExitMessageType,
  /* For debug */
   TransPtrType
 };
@@ -108,7 +108,7 @@ class NetworkInterface : public NetworkLowLevel {
     static void onDoInvalidate( MessageHdr &m );
 
     static void onAckInvalidate( MessageHdr &m );
-
+    static void onExitMessage( MessageHdr &m );
 
     static void onTDec( MessageHdr &m );
 
@@ -131,6 +131,7 @@ class NetworkInterface : public NetworkLowLevel {
                                         void * page,
                                         size_t offset,
                                         size_t len) ;
+   static void bcast_exit( int code );
 
     static void dbg_send_ptr( node_id_t target, void * ptr );
     void dbg_get_ptr( void ** ptrp );

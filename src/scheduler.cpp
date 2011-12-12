@@ -199,7 +199,10 @@ void ExecutionUnit::after_code() {
     // Process fat pointers refecence counters.
     local_execution_unit->process_commits();
     NetworkInterface *nip = &local_execution_unit->ni;
+    Scheduler::task_count --;
+
     DELEGATE( Delegator::default_delegator, nip->process_messages(); );
+
 }
 
 
@@ -212,7 +215,7 @@ Scheduler * Scheduler::global_scheduler = NULL;
 void Scheduler::schedule_global( struct frame_struct * page )  {
     CFATAL( ! initialized, "Uninitialized TLS");
     if ( task_count > global_local_threshold ) {
-        schedule_external( page );
+        DELEGATE( Delegator::default_delegator, schedule_external( page ););
     } else {
         task_count ++;
         DELEGATE( Delegator::default_delegator, this->prepare_ressources( page ); );
@@ -222,6 +225,8 @@ void Scheduler::schedule_global( struct frame_struct * page )  {
 // This function adds the task to an external queue.
 // This queue can be eventually published or returned for local execution.
 void Scheduler::schedule_external( struct frame_struct * page ) {
+    delegator_only();
+    DEBUG("Adding a task to external tasks (%p).", page);
     external_tasks.push_front( page );
 }
 
@@ -309,7 +314,6 @@ void Scheduler::schedule_inner( struct frame_struct * page ) {
 #pragma omp task
     {
     ExecutionUnit::local_execution_unit->executor( page );
-    task_count --;
     }
 }
 
@@ -335,27 +339,26 @@ int Scheduler::steal_tasks( struct frame_struct ** buffer, int amount ) {
 void Scheduler::steal_and_process() {
     int initial_target = rand()%get_num_nodes();
     int target = initial_target;
-    for (;;) {
 
-                struct frame_struct * buffer[10];
-                int amount = 0;
 
-                while ( (amount = steal_tasks(buffer, 10)) == 0 ) {
-                      target = ( target + 1)%get_num_nodes();
-                      if ( target == initial_target ) {
-                          goto endd;
-                      }
-                }
+    struct frame_struct * buffer[10];
+    int amount = 0;
 
-                for ( int i = 0; i < amount; ++i ) {
-                    schedule_global(buffer[i]);
-                }
-                continue;
-    endd:
+    // This code is only stealing locally.
+    if ( (amount = steal_tasks(buffer, 10)) == 0 ) {
+        // Steal globally :
+        NetworkInterface::send_steal_tasks(target, 10);
 
-                usleep(100);
-                ni.process_messages();
+        // Wait for reply.
+        NetworkInterface::wait_for_stolen_task();
     }
+
+    DEBUG( "Some tasks stolen successfully.");
+    for ( int i = 0; i < amount; ++i ) {
+        schedule_global(buffer[i]);
+    }
+
+
 
 
 

@@ -16,7 +16,7 @@
 #define PAGE_LEN 4096
 
 
-
+bool initialized = false;
 
 boost::interprocess::managed_external_buffer * local_heap;
 using namespace boost::interprocess;
@@ -37,6 +37,12 @@ static void mapper_map_private( void * addr, size_t len ) {
 
 
 void mapper_initialize_address_space ( void * base, size_t len_pernode, int _nnodes ) {
+    if ( initialized ) {
+        FATAL( "Double initialization of address space.");
+    } else {
+
+    }
+
     nnodes = _nnodes;
     zone_len = (~(PAGE_LEN-1))& len_pernode;
 

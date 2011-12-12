@@ -381,6 +381,100 @@ int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
     return 0;
 }
 
+typedef THANDLE( _input(),
+                 _output(vdef(FibOut), int)) fibentry_task;
+
+typedef THANDLE( _input( vdef(A), int,
+                         vdef(B),int ),
+                 _output( vdef(AddOut), int)
+                 ) adder_task;
+typedef THANDLE( _input( vdef(ToPrint),int),
+                 _output() ) printer_task;
+
+// Takes care of creating initial value and binding to print.
+typedef THANDLE( _input(), _output()) fibclient_task;
+
+adder_task * adder() {
+    return TASK(3, adder_task,
+                _code(
+                    DEBUG( "In Adder(%d,%d) -> %d", get_arg(A,int), get_arg(B,int),
+                           get_arg(A,int)+get_arg(B,int));
+                    provide( AddOut, int, get_arg(A,int) + get_arg(B,int));
+                    )
+                );
+}
+
+fibentry_task * fibentry( int n ) {
+    return TASK(1, fibentry_task,
+                _code(
+                    CFATAL( n < 0, "Invalid use of fibentry, n >= 0 required (%d found )", n);
+                    if ( n == 0 || n == 1 ) {
+                        provide( FibOut, int, n);
+                        return;
+                    }
+                    // or spawn fib1 and fib2
+                    fibentry_task * fe1 = fibentry(n-1);
+                    fibentry_task * fe2 = fibentry(n-2);
+
+                    adder_task * ad = adder();
+
+                    bind(fe1, FibOut, ad, A, int);
+                    bind(fe2, FibOut, ad, B, int);
+                    bind_outout( ad, AddOut, FibOut);
+                    tstar_tdec(fe2, NULL);
+                    tstar_tdec(fe1, NULL);
+                    tstar_tdec(ad, NULL);
+
+
+                    ) );
+}
+
+printer_task * printer() {
+    return TASK(1, printer_task,
+                _code (
+                    printf( "Result : %d\n", get_arg(ToPrint,int));
+                    ) );
+}
+
+
+fibclient_task * fibclient(int n) {
+    return TASK( 1, fibclient_task,
+                 _code(
+                     DEBUG( "In FibClient (%d)", n);
+                      fibentry_task * fib0 = fibentry(n);
+                      printer_task * p0 = printer();
+
+                      bind(fib0, FibOut, p0, ToPrint, int );
+
+                      tstar_tdec(fib0,NULL);
+                     )
+                 );
+
+}
+
+
+int tstar_main_test6(int argc, char ** argv, struct frame_struct* first_task) {
+
+    tstar_setup(argc, argv);
+    if ( get_node_num() == 0) {
+
+
+        fibclient_task * fib0 = fibclient(10);
+
+
+        tstar_main((struct frame_struct *) fib0 );
+    } else {
+        tstar_main(NULL);
+    }
+
+
+
+
+    DEBUG( "Shouldn't display..");
+    return 0;
+}
+
+
 int main( int argc, char ** argv ) {
 #ifdef BUILD_TEST1
            tstar_main_test1(argc, argv, NULL);
@@ -400,4 +494,10 @@ int main( int argc, char ** argv ) {
 #ifdef BUILD_TEST5
            tstar_main_test5(argc, argv, NULL );
 #endif
-       }
+#ifdef BUILD_TEST6
+           tstar_main_test6(argc, argv, NULL );
+#endif
+
+
+}
+
