@@ -17,10 +17,10 @@
 
 #define GLOBAL_LOCAL_THRESHOLD 20
 
-struct TDec {
-    struct frame_struct * page;
-    void * ref;
-};
+//struct TDec {
+//    struct frame_struct * page;
+//    void * ref;
+//};
 
 struct DWrite {
     void * obj;
@@ -78,6 +78,8 @@ class Scheduler {
 
 
 public :
+    static const int lower_bound_for_work = 10;
+
     static int task_count;
 
     static Scheduler * global_scheduler;

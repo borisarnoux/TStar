@@ -135,7 +135,7 @@ private:
           //CFATAL(delegator_flag == 1, "Nested delegators" );
           delegator_flag += 1;
           set_current_color(33);
-          DEBUG("[In delegator]");
+          DEBUG("[In delegator] : code at %p ", c);
 	  (*c)();
           DEBUG( "[Out of delegator]");
           set_current_color(0);

@@ -25,8 +25,11 @@ enum MessageTypes {
 
   TDecType, // Routable
   ExitMessageType,
+  StealMessageType,
+  StolenMessageType,
  /* For debug */
-  TransPtrType
+  TransPtrType,
+  LastMessageType
 };
 
 
@@ -72,7 +75,9 @@ class NetworkInterface : public NetworkLowLevel {
     void (* message_type_table[100] )(MessageHdr &);
     static void * dbg_ptr_holder;
     static int dbg_ptr_signal;
+    static int stolen_message_arrived;
   public:
+    static NetworkInterface * global_network_interface;
 
     NetworkInterface();
 
@@ -87,7 +92,7 @@ class NetworkInterface : public NetworkLowLevel {
 
     static void onDataMessage( MessageHdr &m );
 
-	static void onDataReqMessage( MessageHdr &m );
+    static void onDataReqMessage( MessageHdr &m );
 
 
     static void onRWrite( MessageHdr &m );
@@ -112,6 +117,9 @@ class NetworkInterface : public NetworkLowLevel {
 
     static void onTDec( MessageHdr &m );
 
+    static void onStealMessage( MessageHdr &m );
+    static void onStolenMessage( MessageHdr &m );
+
       /*------------ Functions for sending messages---------------------- */
     static void send_invalidate_ack( node_id_t target, PageType page );
 
@@ -131,12 +139,16 @@ class NetworkInterface : public NetworkLowLevel {
                                         void * page,
                                         size_t offset,
                                         size_t len) ;
-   static void bcast_exit( int code );
+
+    static void send_steal_message( node_id_t target, int amount );
+    static void send_stolen_message( node_id_t target, int amont, struct frame_struct ** buffer );
+
+    static void bcast_exit( int code );
 
     static void dbg_send_ptr( node_id_t target, void * ptr );
     void dbg_get_ptr( void ** ptrp );
     static void onTransPtr(MessageHdr &msg);
-
+    void wait_for_stolen_task();
 };
 
 #endif

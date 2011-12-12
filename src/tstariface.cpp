@@ -13,7 +13,7 @@
 #include <owm_mem.hpp>
 #include <invalidation.hpp>
 #include <delegator.hpp>
-
+#include <typetuple.hpp>
 
 #ifdef __x86_64
 #define ZONE_START 0x70ef55b44000
@@ -74,6 +74,8 @@ void tstar_teardown(int code) {
 }
 
 
+typedef THANDLE( _input(), _output() ) dummy_task;
+
 
 int tstar_main( struct frame_struct* first_task) {
     if ( !initialized ) {
@@ -93,23 +95,27 @@ int tstar_main( struct frame_struct* first_task) {
             sched->tls_init();
 #pragma omp single
             {
-                DEBUG( "Launching main task...");
-                DELEGATE(Delegator::default_delegator,
-                         DEBUG( "Delegated : global scheduling of first_task");
-                        sched->schedule_global( first_task);
-                );
-                DELEGATE(Delegator::default_delegator, sched->steal_and_process(); );
+                DEBUG( "Launching main task on node : %d ", get_node_num());
+                sched->schedule_global( first_task);
 
             }
 }
     } else {
+       // Create a dummy task :
+        dummy_task * dt = TASK( 1, dummy_task, _code(
+                                    DEBUG( "Program start on node %d", get_node_num());
+                                    ) );
 #pragma omp parallel
 {
          sched->tls_init();
- #pragma omp single
+
+#pragma omp single
 {
-        DELEGATE(Delegator::default_delegator, sched->steal_and_process(); );
+             sched->schedule_global( (struct frame_struct*)dt);
+
+
 }
+
 }
     }
 

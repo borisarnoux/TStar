@@ -12,6 +12,7 @@
 #include <data_events.hpp>
 #include <mapper.h>
 #include <owm_mem.hpp>
+#include <scheduler.hpp>
 
 struct DataMessage {
   void * page;
@@ -80,6 +81,14 @@ struct ExitMessage {
     int code;
 };
 
+struct StealMessage {
+    int amount;
+};
+
+struct StolenMessage {
+    int amount;
+    struct frame_struct * stolen[];
+}__packed;
 
 void NetworkLowLevel::init( int* argc, char *** argv ) {
       MPI_Init(argc, argv );
@@ -126,13 +135,20 @@ bool NetworkLowLevel::receive( MessageHdr &m ) const {
 
 void * NetworkInterface::dbg_ptr_holder = NULL;
 int NetworkInterface::dbg_ptr_signal = 0;
+int NetworkInterface::stolen_message_arrived = 0;
+NetworkInterface * NetworkInterface::global_network_interface = NULL;
 
 NetworkInterface::NetworkInterface() : NetworkLowLevel() {
 // This marco registers the handlers (following naming convention "onX")
 // with the types enum (convention XType), into a table for multiplexing
 // messages.
-
-#define BIND_MT( id ) message_type_table[id##Type] = &on##id
+CFATAL( global_network_interface != NULL, "Double network interface ");
+global_network_interface = this;
+      bool type_handle_checker[LastMessageType];
+      for ( int i = 0; i < LastMessageType; ++i ) {
+          type_handle_checker[i] = 0;
+      }
+#define BIND_MT( id ) message_type_table[id##Type] = &on##id; type_handle_checker[id##Type] = 1
       BIND_MT( DataMessage );
       BIND_MT( DataReqMessage );
       BIND_MT( DoInvalidate );
@@ -145,10 +161,17 @@ NetworkInterface::NetworkInterface() : NetworkLowLevel() {
       BIND_MT( GoTransient );
       BIND_MT( RespTransfer );
       BIND_MT( ExitMessage );
+      BIND_MT( StealMessage);
+      BIND_MT( StolenMessage);
       /* For debugging purposes */
       BIND_MT( TransPtr );
 
 #undef BIND_MT
+      for ( int i = 0; i < LastMessageType; ++i ) {
+          if (type_handle_checker[i] == 0)  {
+              FATAL( "Undefined handler : %d, BIND_MT it !", i);
+          }
+      }
 }
 
 void NetworkInterface::process_messages() const {
@@ -499,6 +522,30 @@ void NetworkInterface::onTDec( MessageHdr &m ) {
 
 
 }
+
+void NetworkInterface::onStealMessage( MessageHdr &m ) {
+    StealMessage &sm = *(StealMessage *) m.data;
+    DEBUG( "Networkinterface : Steal Message received, responding...");
+    int amount = sm.amount;
+
+    frame_struct * buffer [ amount ];
+    amount = Scheduler::global_scheduler->steal_tasks(buffer, amount );
+
+    send_stolen_message( m.from, amount, buffer );
+
+}
+
+void NetworkInterface::onStolenMessage( MessageHdr &m ) {
+    StolenMessage &sm = *(StolenMessage*) m.data;
+    DEBUG( "Networkinterface : Stolen Message received.");
+
+    int amount = sm.amount;
+    for ( int i = 0; i < amount; ++ i ) {
+        Scheduler::global_scheduler->schedule_global(sm.stolen[i]);
+    }
+    stolen_message_arrived = 1;
+}
+
 void NetworkInterface::onExitMessage( MessageHdr &m ) {
     DEBUG( "Exit Received");
     int code = ((ExitMessage*)m.data)->code;
@@ -645,6 +692,8 @@ void NetworkInterface::bcast_exit( int code ) {
         m.to = i;
         m.from = get_node_num();
         m.type = ExitMessageType;
+
+        send(m);
     }
 
 }
@@ -676,12 +725,66 @@ void NetworkInterface::dbg_send_ptr( node_id_t target, void * ptr ) {
     send( msg );
 }
 
-NetworkInterface::send_steal_tasks(target, 10) {
+void NetworkInterface::send_steal_message(node_id_t target, int amount ) {
+    CFATAL( target < 0 || target >= get_num_nodes(), "Invalid target : %d", target);
+    CFATAL( amount <= 0 || amount > 1000, "Invalid amount of tasks to steal (%d) ", amount);
+    CFATAL( target == get_node_num(), "Cannot steal self : absurd, check code.");
+
+    DEBUG( "NetworkInterface : Sending Steal message for %d : %d tasks wanted. ", target, amount );
+    StealMessage s;
+    s.amount;
+
+    MessageHdr m;
+    m.data = &s;
+    m.data_size = sizeof( StealMessage );
+
+    m.to = target;
+    m.from = get_node_num();
+    m.type = StealMessageType;
+
+    send( m );
+    DEBUG( "Steal message sent.");
 
 }
 
+void NetworkInterface::send_stolen_message( int target ,  int amount, struct frame_struct ** buffer ) {
+    CFATAL( target < 0 || target >= get_num_nodes(), "Invalid target : %d", target);
+    CFATAL( amount <= 0 || amount > 1000, "Invalid amount of tasks to steal (%d) ", amount);
+    CFATAL( target == get_node_num(), "Cannot steal self : absurd, check code.");
+    DEBUG( "NetworkInterface : Sending Stolen message for %d : %d tasks packed. ", target, amount );
+
+    // Allocate a message :
+    StolenMessage * sm = (StolenMessage*) new char[sizeof(StolenMessage) + amount * sizeof(frame_struct*)];
+    sm->amount = amount;
+    memcpy( sm->stolen, buffer, amount * sizeof(frame_struct*));
+
+    MessageHdr m;
+    m.from = get_node_num();
+    m.to = target;
+    m.data_size = sizeof(StolenMessage) + amount * sizeof(frame_struct *);
+    m.data = sm;
+    m.type = StolenMessageType;
+
+    send( m );
+    delete[] (char*)sm;
+}
+
+
 // Wait for reply.
-NetworkInterface::wait_for_stolen_task() {
+void NetworkInterface::wait_for_stolen_task() {
+    // This function is used when it is needed to busy wait for results from a steal.
+    // Due to its coslty nature, it should be the last line of defence and only
+    // should be activated when the whole node has no work to work on.
+
+    // Besides, it will be done in a delegator, and as a lengthy function it will
+    // Deny access to the delegator as long as it is waiting there.
+    // The node itself will still be responsive and process messages as usual.
+
+    while (!stolen_message_arrived) {
+        process_messages();
+    }
+    stolen_message_arrived = 0;
+
 }
 
 

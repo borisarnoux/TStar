@@ -32,6 +32,8 @@ void ExecutionUnit::executor( struct frame_struct * page ) {
     }
     DEBUG( "%p %p %p", local_execution_unit, local_execution_unit, page );
     local_execution_unit->before_code();
+
+    DEBUG( "Executing function for task : %p, at %p ", page, page->static_data->fn);
     page->static_data->fn();
     local_execution_unit->after_code();
 
@@ -199,9 +201,31 @@ void ExecutionUnit::after_code() {
     // Process fat pointers refecence counters.
     local_execution_unit->process_commits();
     NetworkInterface *nip = &local_execution_unit->ni;
-    Scheduler::task_count --;
-
+    __sync_sub_and_fetch( &Scheduler::task_count, 1);
+    // As a systematic step, we process messages.
     DELEGATE( Delegator::default_delegator, nip->process_messages(); );
+
+    // Then consider what might be to do :
+    while ( Scheduler::task_count == 0 ) {
+        // Then we are the last one :
+        CFATAL( get_num_nodes() == 1, "Program lacks proper termination.");
+        int target = rand()%get_num_nodes();
+        while ( target == get_node_num() ) {
+            target = rand()%get_num_nodes();
+        }
+        NetworkInterface::send_steal_message( target , 20 );
+        CFATAL( NetworkInterface::global_network_interface==NULL, "Uninitialized network interface.");
+        NetworkInterface::global_network_interface->wait_for_stolen_task();
+    }
+
+    // If we are simply under the limit :
+    if ( get_num_nodes() > 1 && Scheduler::task_count <= Scheduler::lower_bound_for_work ) {
+        int target = rand()%get_num_nodes();
+        while ( target == get_node_num() ) {
+            target = rand()%get_num_nodes();
+        }
+        NetworkInterface::send_steal_message( target, 20 );
+    }
 
 }
 
@@ -215,9 +239,9 @@ Scheduler * Scheduler::global_scheduler = NULL;
 void Scheduler::schedule_global( struct frame_struct * page )  {
     CFATAL( ! initialized, "Uninitialized TLS");
     if ( task_count > global_local_threshold ) {
-        DELEGATE( Delegator::default_delegator, schedule_external( page ););
+        DELEGATE( Delegator::default_delegator, this->schedule_external( page ););
     } else {
-        task_count ++;
+        __sync_add_and_fetch( &task_count, 1 );
         DELEGATE( Delegator::default_delegator, this->prepare_ressources( page ); );
     }
 }
@@ -337,30 +361,7 @@ int Scheduler::steal_tasks( struct frame_struct ** buffer, int amount ) {
 }
 
 void Scheduler::steal_and_process() {
-    int initial_target = rand()%get_num_nodes();
-    int target = initial_target;
-
-
-    struct frame_struct * buffer[10];
-    int amount = 0;
-
-    // This code is only stealing locally.
-    if ( (amount = steal_tasks(buffer, 10)) == 0 ) {
-        // Steal globally :
-        NetworkInterface::send_steal_tasks(target, 10);
-
-        // Wait for reply.
-        NetworkInterface::wait_for_stolen_task();
-    }
-
-    DEBUG( "Some tasks stolen successfully.");
-    for ( int i = 0; i < amount; ++i ) {
-        schedule_global(buffer[i]);
-    }
-
-
-
-
+    FATAL( "Not implemented//Deprecated");
 
 }
 
