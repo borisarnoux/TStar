@@ -65,6 +65,11 @@ struct frame_struct * tstar_getcfp() {
     return ExecutionUnit::local_execution_unit->current_cfp;
 }
 
+
+void tstar_twrite( void * object, void * page, size_t offset, void * buffer, size_t size ) {
+    ExecutionUnit::local_execution_unit->register_write(object,page,offset,buffer,size);
+}
+
 void tstar_tend() {
     // nothing to do.
 }

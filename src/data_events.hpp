@@ -19,7 +19,7 @@ void register_for_write_arrival( PageType page, Closure * c );
 void request_page_data( PageType page );
 void request_page_resp( PageType page );
 void ask_or_do_tdec( void * page );
-void ask_or_do_rwrite_then( PageType page, size_t offset, size_t len, Closure * c );
+void ask_or_do_rwrite_then( PageType page, size_t offset, void *input_buffer, size_t len, Closure * c );
 
 #endif
 

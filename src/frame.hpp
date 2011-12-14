@@ -12,7 +12,7 @@ extern "C" {
 
 #define R_FRAME_TYPE 0x44
 #define W_FRAME_TYPE 0x45
-#define RW_FRAME_TYPE 0X46
+#define RW_FRAME_TYPE 0x46
 #define FATP_TYPE 0x34
 #define DATA_TYPE 0x35
 

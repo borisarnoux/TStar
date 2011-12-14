@@ -101,16 +101,17 @@ public :
           occupied = 1;
 
           __sync_synchronize();
+          fastl = 0;
+
           do {
-                fastl = 0;
-                DEBUG( "In delegate...");
+                //DEBUG( "In delegate...");
                 do_delegations();
             } while(! __sync_bool_compare_and_swap(&fastl,0,1));
 
            occupied = 0;
            __sync_synchronize();
-           fastl = 0;
 	}
+        fastl = 0;
 
 	
   }
@@ -135,9 +136,9 @@ private:
           //CFATAL(delegator_flag == 1, "Nested delegators" );
           delegator_flag += 1;
           set_current_color(33);
-          DEBUG("[In delegator] : code at %p ", c);
+          //DEBUG("[In delegator] : code at %p ", c);
 	  (*c)();
-          DEBUG( "[Out of delegator]");
+          //DEBUG( "[Out of delegator]");
           set_current_color(0);
           delegator_flag -= 1;
 	}

@@ -12,7 +12,7 @@
 #include <invalidation.hpp>
 #include <delegator.hpp>
 #include <network.hpp>
-
+#include <memory>
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
 #define GLOBAL_LOCAL_THRESHOLD 20
@@ -27,8 +27,12 @@ struct DWrite {
     void * frame;
     size_t offset;
     size_t len;
-    DWrite(void * _o, void * _f, size_t _offset, size_t _l) :
-        obj(_o),frame(_f),offset(_offset),len(_l) {}
+    std::auto_ptr<char> buffer;
+    DWrite(void * _o, void * _f, size_t _offset, void * _buf, size_t _l) :
+        obj(_o),frame(_f),offset(_offset),len(_l),buffer(new char[_l]) {
+        memcpy( buffer.get(), _buf, _l);
+    }
+
 
 };
 
@@ -36,7 +40,7 @@ struct DWrite {
 
 
 
-typedef std::multimap<PageType, DWrite> DWriteMap;
+typedef std::multimap<PageType, DWrite*> DWriteMap;
 typedef std::multimap<PageType, PageType> TDecMap;
 typedef std::list<struct frame_struct*> CreatedFramesList;
 
@@ -62,7 +66,7 @@ public:
 
     void executor( struct frame_struct * page );
     void tdec( struct frame_struct * page, void * ref );
-    void register_write( void * object, void * frame, size_t offset, size_t len );
+    void register_write( void * object, void * frame, size_t offset, void * buffer, size_t len );
     void process_commits();
     bool check_ressources();
     void before_code();
@@ -71,16 +75,18 @@ public:
 
 
 class Scheduler {
-    std::list<struct frame_struct *> external_tasks;
     int global_local_threshold;
     static __thread bool initialized;
     NetworkInterface &ni;
 
 
 public :
+    std::list<struct frame_struct *> external_tasks;
+
     static const int lower_bound_for_work = 10;
 
-    static int task_count;
+    static int prep_task_count;
+    static int omp_task_count;
 
     static Scheduler * global_scheduler;
 
@@ -115,7 +121,7 @@ public :
 
     // This yields to the inner scheduler.
     void schedule_inner( struct frame_struct * page );
-    void steal_and_process();
+    void steal_and_process(int amount);
 
     // This method returns an array of stolen tasks.
     // buffer is an output buffer, supposed big enough.

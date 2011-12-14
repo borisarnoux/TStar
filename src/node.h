@@ -30,16 +30,16 @@ static void set_num_nodes( int numnodes ) {
 
 inline node_id_t get_node_num() {
         if ( my_node == -1 ) {
-            fprintf(stderr,"Uninitialized node num\n");
-            exit(EXIT_FAILURE);
+            fprintf(stderr,"WARNING : Uninitialized node num\n");
+            return 666;
         }
         return my_node;
 }
 
 static inline int get_num_nodes() {
     if ( num_nodes == -1 ) {
-        fprintf(stderr,"Uninitialized num nodes\n");
-        exit(EXIT_FAILURE);
+        fprintf(stderr,"WARNING : Uninitialized num nodes\n");
+        return 666;
 
     }
     return num_nodes;

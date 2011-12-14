@@ -82,12 +82,20 @@ int mapper_who_owns( void * ptr ) {
 
 
 void * mapper_malloc(size_t len) {
-    void * retval = local_heap->allocate( len );
+    void * retval = NULL;
+#pragma omp critical (owm_heap)
+{
+
+    retval = local_heap->allocate( len );
+}
     CFATAL( retval == 0, "No memory left.");
     return retval;
 }
 
 void mapper_free( void * zone ) {
+#pragma omp critical (owm_heap)
+{
     local_heap->deallocate( zone );
+}
 }
 

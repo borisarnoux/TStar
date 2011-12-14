@@ -34,7 +34,7 @@ void set_current_color( int color );
 
 #ifndef MUTE
 #define DEBUG( msg, ...  ) \
-    do { fprintf(stderr, "\x1b[%dm (%d:%d)\t"  msg  "\x1b[;m" "\t%s:%d" "\n", current_color, get_node_num(), get_thread_num(), ##__VA_ARGS__, __FILE__, __LINE__);} while (0)
+    do { fprintf(stderr, "\x1b[%dm (%d:%d)\t"  msg  " \x1b[;m" "\t%s:%d" "\n", current_color, get_node_num(), get_thread_num(), ##__VA_ARGS__, __FILE__, __LINE__);} while (0)
 #else
 #define DEBUG(msg, ...)
 #endif

@@ -2,6 +2,7 @@
 #define NETWORK_HPP
 
 #include "mpi.h"
+#include <node.h>
 #include <identifiers.h>
 
 // Routable messages have orig and are forwarded.
@@ -29,7 +30,9 @@ enum MessageTypes {
   StolenMessageType,
  /* For debug */
   TransPtrType,
+  FreeMessageType,
   LastMessageType
+
 };
 
 
@@ -64,6 +67,9 @@ public:
     bool receive( MessageHdr &m ) const;
 
     static inline void send( MessageHdr &m ) {
+        if ( m.to == get_node_num()) {
+            DEBUG( "Warning : sending a message to self.");
+        }
       MPI_Send( m.data, m.data_size, MPI_CHAR, m.to, m.type, MPI_COMM_WORLD);
 
     }
@@ -75,8 +81,9 @@ class NetworkInterface : public NetworkLowLevel {
     void (* message_type_table[100] )(MessageHdr &);
     static void * dbg_ptr_holder;
     static int dbg_ptr_signal;
-    static int stolen_message_arrived;
   public:
+    static int stolen_message_onflight;
+
     static NetworkInterface * global_network_interface;
 
     NetworkInterface();
@@ -119,7 +126,7 @@ class NetworkInterface : public NetworkLowLevel {
 
     static void onStealMessage( MessageHdr &m );
     static void onStolenMessage( MessageHdr &m );
-
+    static void onFreeMessage(MessageHdr &m);
       /*------------ Functions for sending messages---------------------- */
     static void send_invalidate_ack( node_id_t target, PageType page );
 
@@ -138,10 +145,12 @@ class NetworkInterface : public NetworkLowLevel {
                                         serial_t serial,
                                         void * page,
                                         size_t offset,
+                                        void * buffer,
                                         size_t len) ;
 
     static void send_steal_message( node_id_t target, int amount );
     static void send_stolen_message( node_id_t target, int amont, struct frame_struct ** buffer );
+    static void send_free_message( node_id_t target, PageType page );
 
     static void bcast_exit( int code );
 

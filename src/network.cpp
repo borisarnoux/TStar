@@ -90,6 +90,10 @@ struct StolenMessage {
     struct frame_struct * stolen[];
 }__packed;
 
+struct FreeMessage {
+    void * page;
+};
+
 void NetworkLowLevel::init( int* argc, char *** argv ) {
       MPI_Init(argc, argv );
       MPI_Comm_rank(MPI_COMM_WORLD, &node_num );
@@ -135,7 +139,7 @@ bool NetworkLowLevel::receive( MessageHdr &m ) const {
 
 void * NetworkInterface::dbg_ptr_holder = NULL;
 int NetworkInterface::dbg_ptr_signal = 0;
-int NetworkInterface::stolen_message_arrived = 0;
+int NetworkInterface::stolen_message_onflight = 0;
 NetworkInterface * NetworkInterface::global_network_interface = NULL;
 
 NetworkInterface::NetworkInterface() : NetworkLowLevel() {
@@ -163,6 +167,7 @@ global_network_interface = this;
       BIND_MT( ExitMessage );
       BIND_MT( StealMessage);
       BIND_MT( StolenMessage);
+      BIND_MT( FreeMessage );
       /* For debugging purposes */
       BIND_MT( TransPtr );
 
@@ -222,6 +227,7 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
         VALIDATE( fheader );
         fheader->canari = CANARI;
         fheader->canari2 = CANARI;
+        fheader->next_resp = m.from;
 
         // Signal data arrived :
         CFATAL ( !PAGE_IS_AVAILABLE(drm.page), "Inconsistent validation");
@@ -282,7 +288,7 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
         owm_frame_layout * fheader = GET_FHEADER( rwm.page );
         if ( ! IS_RESP( fheader ) ) {
           CFATAL(rwm.orig == get_node_num(), "Forwarding loop.");
-          forward( m, fheader->next_resp );
+          forward( m, PAGE_GET_NEXT_RESP(rwm.page) );
           return;
         }
 
@@ -314,6 +320,11 @@ void NetworkInterface::onRWriteAck( MessageHdr &m ) {
 
         DEBUG( "NETWORK -- Received RWriteAck for page : (%p), serial : %d", rwa.page, rwa.serial);
         // Not much else to do but to signal.
+
+        // We additionaly note that the sender is the resp for this page.
+        struct owm_frame_layout * fheader = GET_FHEADER(rwa.page);
+        fheader->next_resp = m.from;
+
         signal_write_commited( rwa.serial, rwa.page );
 
 }
@@ -457,7 +468,7 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
 
         if ( !IS_RESP( fheader )  ) {
           CFATAL(ai.orig == get_node_num(), "Forwarding loop.");
-          forward( m, fheader->next_resp );
+          forward( m, PAGE_GET_NEXT_RESP(ai.page) );
           return;
         } 
 
@@ -511,21 +522,25 @@ void NetworkInterface::onTDec( MessageHdr &m ) {
         owm_frame_layout * fheader = GET_FHEADER( tdec.page );
 
         if ( ! IS_RESP( fheader ) ) {
-          forward( m, fheader->next_resp );
+            forward( m, PAGE_GET_NEXT_RESP(tdec.page) );
           return;
         }
 
         // Do Tdec :
-        struct frame_struct * frame_struct_p =
+        struct frame_struct * fp =
                 (struct frame_struct*) fheader->data;
 
-
+        int sfres =  __sync_sub_and_fetch( &fp->sc, 1 );
+        DEBUG( "TDec comes to : %d", sfres);
+        if ( sfres == 0 ) {
+            Scheduler::global_scheduler->schedule_global(fp);
+        }
 
 }
 
 void NetworkInterface::onStealMessage( MessageHdr &m ) {
     StealMessage &sm = *(StealMessage *) m.data;
-    DEBUG( "Networkinterface : Steal Message received, responding...");
+    DEBUG( "Networkinterface : Steal Message received(amount=%d), responding...", sm.amount);
     int amount = sm.amount;
 
     frame_struct * buffer [ amount ];
@@ -535,15 +550,19 @@ void NetworkInterface::onStealMessage( MessageHdr &m ) {
 
 }
 
+// This handler processes the "Stolen" Messages, that is,
+// the messages containing pointers to the tasks that were stolen
+// and are transfered locally.
 void NetworkInterface::onStolenMessage( MessageHdr &m ) {
     StolenMessage &sm = *(StolenMessage*) m.data;
     DEBUG( "Networkinterface : Stolen Message received.");
 
     int amount = sm.amount;
     for ( int i = 0; i < amount; ++ i ) {
+        DEBUG( "Importing Task.");
         Scheduler::global_scheduler->schedule_global(sm.stolen[i]);
     }
-    stolen_message_arrived = 1;
+    stolen_message_onflight = 0;
 }
 
 void NetworkInterface::onExitMessage( MessageHdr &m ) {
@@ -551,6 +570,21 @@ void NetworkInterface::onExitMessage( MessageHdr &m ) {
     int code = ((ExitMessage*)m.data)->code;
     MPI_Finalize();
     exit(code);
+}
+
+void NetworkInterface::onFreeMessage(MessageHdr &m) {
+
+
+    FreeMessage &fm = *(FreeMessage*)m.data;
+    if ( !PAGE_IS_RESP(fm.page)) {
+        forward(m, PAGE_GET_NEXT_RESP(fm.page));
+    }
+
+    DEBUG( "FreeMessage Received for %p : freeing locally.", fm.page);
+
+    owm_free_local(fm.page);
+
+
 }
 
 
@@ -663,9 +697,10 @@ void NetworkInterface::send_rwrite( node_id_t target,
                                     serial_t serial,
                                     void * page,
                                     size_t offset,
+                                    void * buffer,
                                     size_t len) {
     RWrite &rw = *(RWrite*)new char[sizeof(RWrite)+ len];
-    memcpy( rw.data, (char*)page+offset, len );
+    memcpy( rw.data, (char*)buffer, len );
     rw.offset = offset;
     rw.orig = get_node_num();
     rw.serial = serial;
@@ -680,6 +715,7 @@ void NetworkInterface::send_rwrite( node_id_t target,
     m.type = RWriteType;
 
     send(m);
+    delete[] (char*)&rw;
 }
 
 void NetworkInterface::bcast_exit( int code ) {
@@ -724,7 +760,6 @@ void NetworkInterface::dbg_send_ptr( node_id_t target, void * ptr ) {
 
     send( msg );
 }
-
 void NetworkInterface::send_steal_message(node_id_t target, int amount ) {
     CFATAL( target < 0 || target >= get_num_nodes(), "Invalid target : %d", target);
     CFATAL( amount <= 0 || amount > 1000, "Invalid amount of tasks to steal (%d) ", amount);
@@ -732,7 +767,7 @@ void NetworkInterface::send_steal_message(node_id_t target, int amount ) {
 
     DEBUG( "NetworkInterface : Sending Steal message for %d : %d tasks wanted. ", target, amount );
     StealMessage s;
-    s.amount;
+    s.amount = amount;
 
     MessageHdr m;
     m.data = &s;
@@ -742,6 +777,7 @@ void NetworkInterface::send_steal_message(node_id_t target, int amount ) {
     m.from = get_node_num();
     m.type = StealMessageType;
 
+    stolen_message_onflight=1;
     send( m );
     DEBUG( "Steal message sent.");
 
@@ -749,7 +785,6 @@ void NetworkInterface::send_steal_message(node_id_t target, int amount ) {
 
 void NetworkInterface::send_stolen_message( int target ,  int amount, struct frame_struct ** buffer ) {
     CFATAL( target < 0 || target >= get_num_nodes(), "Invalid target : %d", target);
-    CFATAL( amount <= 0 || amount > 1000, "Invalid amount of tasks to steal (%d) ", amount);
     CFATAL( target == get_node_num(), "Cannot steal self : absurd, check code.");
     DEBUG( "NetworkInterface : Sending Stolen message for %d : %d tasks packed. ", target, amount );
 
@@ -769,6 +804,19 @@ void NetworkInterface::send_stolen_message( int target ,  int amount, struct fra
     delete[] (char*)sm;
 }
 
+void NetworkInterface::send_free_message(node_id_t target, PageType page) {
+    FreeMessage fm;
+    fm.page = page;
+
+    MessageHdr m;
+    m.to = target;
+    m.from = get_node_num();
+    m.type = FreeMessageType;
+    m.data = &fm;
+    m.data_size = sizeof( FreeMessage);
+
+    send(m);
+}
 
 // Wait for reply.
 void NetworkInterface::wait_for_stolen_task() {
@@ -780,10 +828,13 @@ void NetworkInterface::wait_for_stolen_task() {
     // Deny access to the delegator as long as it is waiting there.
     // The node itself will still be responsive and process messages as usual.
 
-    while (!stolen_message_arrived) {
-        process_messages();
+    while (stolen_message_onflight) {
+        // Make sure we are not spamming the delegator : ( TODO : do a sync_delegate... )
+        bool waiter = false;
+        bool *wp = &waiter;
+        DELEGATE( Delegator::default_delegator, process_messages(); *wp=true ;);
+        while ( !waiter );
     }
-    stolen_message_arrived = 0;
 
 }
 

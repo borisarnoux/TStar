@@ -36,7 +36,7 @@ struct layout_type_to_data {
 
   template <typename T>
   static int get_dyn_type( T* a ) {
-	return 7;
+        return DATA_TYPE;
   }
 };
 
@@ -307,11 +307,16 @@ struct fusion : public T1, public T2 {
   static const int length = T1::length + T2::length;
 };
 
-
-template <typename T1, typename T2>
+// Uniker us used to avoid collisions between
+// tasks that use similar arguments (ex : none )
+// Thus we can still allocate separate function pointers.
+// Uniker will usually be a lambda.
+template <typename T1, typename T2, typename Uniker>
 struct static_task_data {
     static_task_data() : layout() {
-
+        //fprintf(stderr, "Lol %p\n",&uniker_dummy) ;
+        //fn = NULL;
+        nargs = layout_type::length;
     }
 
     void (*fn)();
@@ -324,30 +329,36 @@ struct static_task_data {
     };
 
     static const int length = T1::length + T2::length;
-
+    // To preserve from erasure (please please)
+    static Uniker uniker_dummy;
 };
+template <typename T1, typename T2, typename Uniker>
+Uniker static_task_data<T1,T2,Uniker>::uniker_dummy;
 
-template <typename T1,typename T2>
+
+// See static_task_data for an explanation about Uniker.
+template <typename T1,typename T2, typename Uniker>
 struct task_data_nocontext {
     task_data_nocontext( int _sc ) : sc(_sc) {
         //printf( "Taskdata_nocontext sc=%d (at %d) constructor : %u %u\n", sc, (intptr_t)&sc-(intptr_t)this,
         //                        sizeof(T1), sizeof(T2) );
                 static_data_p = &layout;
+                //fprintf( stderr, "Setting layout.\n");
     }
 
 
-    struct static_task_data<T1,T2> * static_data_p;
+    struct static_task_data<T1,T2,Uniker> * static_data_p;
     int sc;
     union {
         struct {
             T1 needs;
             T2 provides;
         };
-        void * args[static_task_data<T1,T2>::length];
+        void * args[static_task_data<T1,T2,Uniker>::length];
     };
 
 
-    static static_task_data<T1,T2> layout;
+    static static_task_data<T1,T2,Uniker> layout;
 
     template<typename R, int rank>
     inline R & get() {
@@ -370,17 +381,39 @@ struct task_data_nocontext {
 
 };
 
-template <typename T1,typename T2>
-static_task_data<T1,T2> task_data_nocontext<T1,T2>::layout;
+template <typename T1,typename T2, typename Uniker>
+static_task_data<T1,T2,Uniker> task_data_nocontext<T1,T2,Uniker>::layout;
 
 
+// Here T1 is a task_data_nocontext but this is provided by the function wrapping it.
+// We need to wrap with a function to copy the lambda type around, otherwise it
+// is not feasible (ouch, this is complicated).
 template <typename T1, typename L>
 struct task_data : public T1 {
     task_data(int sc, L _lambda) : T1(sc), lambda(_lambda) {
-                //printf( "Taskdata with context :" " %u\n", sizeof(L) );
-                T1::layout.fn = &exec_lambda;
+                //printf( "Taskdata with context :" " %u\n", sizeof(L) )
+        dummy_counter_for_preserving_the_above_variable += (intptr_t) &static_constructor_trigger_for_function_pointer;
     }
+    // By introducing a singleton struct here
+    // We make sure regardless of the node we are on
+    // The static data will be updated with the method pointer.
+    // we cannot do that in the task_data itself because of
+    // the lambda, that forbids any default construction.
+    // (ouch, that's a bit complicated )
 
+    struct for_constructor {
+        for_constructor() {
+            if ( T1::layout.fn != NULL ) {
+                fprintf(stderr, "Double initialization of %s : exiting.\n", typeid(task_data<T1,L>).name());
+                exit( EXIT_FAILURE);
+            }
+            fprintf(stderr, "Setting function pointer for %s : at (%p).\n", typeid(T1).name(), &T1::layout.fn);
+
+            T1::layout.fn = &exec_lambda;
+        }
+    };
+    static for_constructor static_constructor_trigger_for_function_pointer;
+    static int dummy_counter_for_preserving_the_above_variable;
 
     static void exec_lambda() {
         struct task_data<T1,L> * t = (struct task_data<T1,L> *) tstar_getcfp();
@@ -394,7 +427,11 @@ struct task_data : public T1 {
 
 };
 
+template <typename T1, typename L>
+typename task_data<T1,L>::for_constructor task_data<T1,L>::static_constructor_trigger_for_function_pointer;
 
+template <typename T1, typename L>
+int task_data<T1,L>::dummy_counter_for_preserving_the_above_variable;
 
 template <typename T1, typename L>
 struct task_data<T1,L> * _create_task(int sc, L lambda)  {
@@ -441,8 +478,12 @@ R& handle_get_arg( T1 h, T2 * d ) {
 #define _output(...) named_locator<__VA_ARGS__>
 #define _code(...) __VA_ARGS__
 
-#define THANDLE(T1,T2) task_data_nocontext<T1,T2>
+#define CONCATPP(A,B) CONCAT(A,B)
+#define THANDLE(T1,T2) task_data_nocontext<T1,T2, struct CONCATPP(dummy_uniker, __LINE__ ) *>
 
+
+// TODO : why do we need two lambdas encapsulated here ?
+// Must be a reason for that ...
 #define TASK(sc, taskhandle, BLOCK) \
  ([=] {\
     return _create_task<taskhandle>( sc, [=]{\
@@ -475,8 +516,14 @@ R& handle_get_arg( T1 h, T2 * d ) {
 #define provide( name, type, value )\
      do {\
     type &ref = *(type*) ((intptr_t)get_fra(name)+(intptr_t) get_off(name) );\
-    ref = value;\
+    if ( PAGE_IS_RESP(get_fra(name))) {\
+        ref = value;\
+    } else { \
+        /* Copy it TODO : avoid that.*/ \
+        type varcopy = value;\
+        tstar_twrite(NULL,get_fra(name),get_off(name), &varcopy, sizeof(type) );\
+    }\
     tstar_tdec( get_fra(name), NULL );\
-    } while(0)\
+   } while(0)
 
 

@@ -11,16 +11,17 @@
 #include <delegator.hpp>
 #include <network.hpp>
 #include <mapper.h>
+#include <owm_mem.hpp>
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
 
 
 
-int Scheduler::task_count = 0;
+int Scheduler::prep_task_count = 0;
+int Scheduler::omp_task_count = 0;
 
 
 
-typedef std::multimap<PageType, DWrite> DWriteMap;
 typedef std::multimap<PageType, PageType> TDecMap;
 typedef std::list<struct frame_struct*> CreatedFramesList;
 
@@ -46,9 +47,9 @@ void ExecutionUnit::tdec( struct frame_struct * page, void * ref ) {
 }
 
 
-void ExecutionUnit::register_write( void * object, void * frame, size_t offset, size_t len ) {
+void ExecutionUnit::register_write( void * object, void * frame, size_t offset, void * buffer, size_t len ) {
     void * k = object!=NULL?object:frame;
-    struct DWrite w = {object,frame,offset,len};
+    struct DWrite * w = new DWrite( object,frame,offset,buffer, len );
     writes_by_ressource.insert( DWriteMap::value_type(k,w));
 }
 
@@ -58,7 +59,7 @@ void ExecutionUnit::process_commits() {
     ressource_desc d;
     int nargs = current_cfp->static_data->nargs;
 
-    DEBUG( "ExecutionUnit : Processing Commits -- Task : %p", current_cfp);
+    DEBUG( "ExecutionUnit : Processing Commits -- Task : %p, nargs = %d", current_cfp, nargs);
     for ( int i = 0; i < nargs; ++i ) {
         long & current_type = current_cfp->static_data->arg_types[i];
         if (  current_type == DATA_TYPE || current_type == R_FRAME_TYPE ) {
@@ -66,11 +67,12 @@ void ExecutionUnit::process_commits() {
         }
 
         void * current_value = current_cfp->args[i];
+        DEBUG( "Processing ressource %p of type %x ", current_value, (unsigned int)current_type );
 
         // Same thing for all writes ( by object or by frame )
         auto dwrite_range = writes_by_ressource.equal_range(current_value);
 
-        std::list<DWrite> frame_dwrites;
+        std::list<DWrite*> frame_dwrites;
         for ( auto i = dwrite_range.first; i != dwrite_range.second; ++i) {
             frame_dwrites.insert(frame_dwrites.begin(), i->second);
         }
@@ -138,7 +140,9 @@ void ExecutionUnit::process_commits() {
 
         // Finally, we do the writes :
         for ( auto i = frame_dwrites.begin(); i!=frame_dwrites.end(); ++i) {
-            ask_or_do_rwrite_then(current_value, i->offset, i->len, on_write_commits);
+            ask_or_do_rwrite_then((*i)->frame, (*i)->offset,(*i)->buffer.get(), (*i)->len, on_write_commits);
+            delete *i;
+
         }
 
     }
@@ -200,31 +204,76 @@ void ExecutionUnit::after_code() {
     // and/or free zones written.
     // Process fat pointers refecence counters.
     local_execution_unit->process_commits();
-    NetworkInterface *nip = &local_execution_unit->ni;
-    __sync_sub_and_fetch( &Scheduler::task_count, 1);
+
+    // We can adjust task count.
+    __sync_sub_and_fetch( &Scheduler::prep_task_count, 1);
+    __sync_sub_and_fetch( &Scheduler::omp_task_count, 1);
+
+    // Then we free the memory.
+    owm_free(tstar_getcfp());
+
     // As a systematic step, we process messages.
+    NetworkInterface *nip = &local_execution_unit->ni;
     DELEGATE( Delegator::default_delegator, nip->process_messages(); );
 
-    // Then consider what might be to do :
-    while ( Scheduler::task_count == 0 ) {
-        // Then we are the last one :
-        CFATAL( get_num_nodes() == 1, "Program lacks proper termination.");
-        int target = rand()%get_num_nodes();
-        while ( target == get_node_num() ) {
-            target = rand()%get_num_nodes();
+
+
+    // Then consider what might left to do :
+    while ( Scheduler::prep_task_count == 0 ) {
+        // We are likely the only ones here, but we need to make sure no tasks are
+        // waiting in the external queue for some reason, and need to use a delegator
+        // for that (probably synchronously, unimportant if async )
+        bool waiter = false;
+        bool *wp = &waiter;
+        DELEGATE( Delegator::default_delegator, Scheduler::global_scheduler->steal_and_process(20); *wp = true; );
+        while ( ! waiter);
+        if ( get_num_nodes() == 1 ) {
+            // No need for task stealing in this case.
+            DEBUG( "Infinite ?");
+            continue;
         }
-        NetworkInterface::send_steal_message( target , 20 );
-        CFATAL( NetworkInterface::global_network_interface==NULL, "Uninitialized network interface.");
-        NetworkInterface::global_network_interface->wait_for_stolen_task();
+
+        if ( NetworkInterface::stolen_message_onflight ) {
+            NetworkInterface::global_network_interface->wait_for_stolen_task();
+        } else {
+            int target = rand()%get_num_nodes();
+            while ( target == get_node_num() ) {
+                   target = rand()%get_num_nodes();
+            }
+            NetworkInterface::send_steal_message( target , 21 );
+            CFATAL( NetworkInterface::global_network_interface==NULL, "Uninitialized network interface.");
+            NetworkInterface::global_network_interface->wait_for_stolen_task();
+        }
     }
 
     // If we are simply under the limit :
-    if ( get_num_nodes() > 1 && Scheduler::task_count <= Scheduler::lower_bound_for_work ) {
-        int target = rand()%get_num_nodes();
-        while ( target == get_node_num() ) {
-            target = rand()%get_num_nodes();
+    if ( Scheduler::prep_task_count <= Scheduler::lower_bound_for_work
+          ) {
+
+        bool waiter = false;
+        bool *wp = &waiter;
+
+        DELEGATE( Delegator::default_delegator, Scheduler::global_scheduler->steal_and_process(19); *wp = true; );
+        while ( ! waiter);
+
+        if ( get_num_nodes() > 1 && !NetworkInterface::stolen_message_onflight ) {
+            int target = rand()%get_num_nodes();
+            while ( target == get_node_num() ) {
+                target = rand()%get_num_nodes();
+            }
+            NetworkInterface::send_steal_message( target, 18 );
         }
-        NetworkInterface::send_steal_message( target, 20 );
+    }
+
+    // To process messages of tasks in prep :
+    while ( Scheduler::omp_task_count == 0 ) {
+
+        bool waiter = false;
+        bool *wp = &waiter;
+
+        DELEGATE( Delegator::default_delegator, NetworkInterface::global_network_interface->process_messages(); *wp = true; );
+        while ( ! waiter);
+
     }
 
 }
@@ -238,10 +287,10 @@ Scheduler * Scheduler::global_scheduler = NULL;
 // This is the entry point, should be attained when SC reaches 0.
 void Scheduler::schedule_global( struct frame_struct * page )  {
     CFATAL( ! initialized, "Uninitialized TLS");
-    if ( task_count > global_local_threshold ) {
+    if ( prep_task_count > global_local_threshold ) {
         DELEGATE( Delegator::default_delegator, this->schedule_external( page ););
     } else {
-        __sync_add_and_fetch( &task_count, 1 );
+        __sync_add_and_fetch( &prep_task_count, 1 );
         DELEGATE( Delegator::default_delegator, this->prepare_ressources( page ); );
     }
 }
@@ -266,11 +315,12 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
     int work_count = 0;
     if ( !PAGE_IS_AVAILABLE( page ) ) {
         // Then schedule itself for when its ready :p
+        DEBUG( "Ressources unavailable for task %p, rescheduling for later.", page);
         auto todo = new_Closure( 1,prepare_ressources( page ););
-
+        request_page_data((PageType)page);
         register_for_data_arrival( page, todo );
 
-     return;
+        return;
     }
     for ( int i = 0; i < page->static_data->nargs; ++ i ) {
         if ( page->static_data->arg_types[i] == R_FRAME_TYPE ) {
@@ -334,6 +384,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
 
 // This yields to the inner scheduler.
 void Scheduler::schedule_inner( struct frame_struct * page ) {
+    __sync_add_and_fetch( &omp_task_count, 1 );
 
 #pragma omp task
     {
@@ -346,10 +397,11 @@ void Scheduler::schedule_inner( struct frame_struct * page ) {
 // buffer is an output buffer, supposed big enough.
 int Scheduler::steal_tasks( struct frame_struct ** buffer, int amount ) {
     delegator_only();
-
     for ( int i = 0; i < amount; ++ i ) {
         if ( external_tasks.empty() ) {
             // Only i tasks were stolen.
+            DEBUG( "Stealing tasks in Scheduler::steal_tasks (amount=%d : ret = %d)",amount, i);
+
             return i;
         }
         buffer[i] = external_tasks.back();
@@ -357,11 +409,19 @@ int Scheduler::steal_tasks( struct frame_struct ** buffer, int amount ) {
     }
 
     // `Amount` tasks were stolen
+    DEBUG( "Stealing tasks in Scheduler::steal_tasks (amount=%d : ret = %d)",amount, amount);
+
     return amount;
 }
 
-void Scheduler::steal_and_process() {
-    FATAL( "Not implemented//Deprecated");
+void Scheduler::steal_and_process(int amount) {
+    CFATAL( amount < 0 || amount > 1000, "Insane amount to steal : %d", amount);
+    struct frame_struct * buffer[amount];
+
+    int stolen_amount = steal_tasks(buffer, amount);
+    for ( int i = 0; i < stolen_amount; ++i ) {
+        schedule_global(buffer[i]);
+    }
 
 }
 

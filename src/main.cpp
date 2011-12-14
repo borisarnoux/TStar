@@ -360,7 +360,7 @@ int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
 #pragma omp single
             {
             DELEGATE(d, s->schedule_global( (struct frame_struct *)htp);
-                        s->steal_and_process();
+                       //s->steal_and_process();
                 );
             }
 }
@@ -370,7 +370,7 @@ int tstar_main_test5(int argc, char ** argv, struct frame_struct* first_task) {
          s->tls_init();
  #pragma omp single
 {
-        DELEGATE( d, s->steal_and_process(); );
+        //DELEGATE( d, s->steal_and_process(); );
 }
 }
     }
@@ -408,11 +408,13 @@ fibentry_task * fibentry( int n ) {
     return TASK(1, fibentry_task,
                 _code(
                     CFATAL( n < 0, "Invalid use of fibentry, n >= 0 required (%d found )", n);
+                    DEBUG( "FIBENTRY %d", n);
                     if ( n == 0 || n == 1 ) {
                         provide( FibOut, int, n);
                         return;
                     }
                     // or spawn fib1 and fib2
+
                     fibentry_task * fe1 = fibentry(n-1);
                     fibentry_task * fe2 = fibentry(n-2);
 
@@ -432,7 +434,9 @@ fibentry_task * fibentry( int n ) {
 printer_task * printer() {
     return TASK(1, printer_task,
                 _code (
-                    printf( "Result : %d\n", get_arg(ToPrint,int));
+                    DEBUG( "Result : %d\n", get_arg(ToPrint,int));
+                    NetworkInterface::bcast_exit(0);
+
                     ) );
 }
 
@@ -458,8 +462,8 @@ int tstar_main_test6(int argc, char ** argv, struct frame_struct* first_task) {
     tstar_setup(argc, argv);
     if ( get_node_num() == 0) {
 
-
-        fibclient_task * fib0 = fibclient(10);
+        int fibval = atoi( argv[argc-1]);
+        fibclient_task * fib0 = fibclient(fibval==0?10:fibval);
 
 
         tstar_main((struct frame_struct *) fib0 );

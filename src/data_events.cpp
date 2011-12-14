@@ -285,7 +285,7 @@ void ask_or_do_tdec( void * page ) {
 
 
 static __thread serial_t serial_source = 0;
-void ask_or_do_rwrite_then( PageType page, size_t offset, size_t len, Closure * c) {
+void ask_or_do_rwrite_then( PageType page, size_t offset, void *input_buffer, size_t len, Closure * c) {
 
     // For now just consider doingthis on a RESP is an error :
     CFATAL( PAGE_IS_RESP(page), "Asking for RWRite on locally available page.");
@@ -302,6 +302,6 @@ void ask_or_do_rwrite_then( PageType page, size_t offset, size_t len, Closure * 
 
     // Register the closure :
     register_for_commitack( page, chosen_serial, c);
-    NetworkInterface::send_rwrite( nextresp, chosen_serial, page, offset, len );
+    NetworkInterface::send_rwrite( nextresp, chosen_serial, page, offset,input_buffer, len );
 
 }
