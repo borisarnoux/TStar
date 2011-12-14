@@ -9,7 +9,7 @@
 
 struct coords {
     struct frame_struct * page;
-    size_t offset;
+    uintptr_t offset;
 };
 
 /**** Layout Descriptor Mapping *****/
