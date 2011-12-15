@@ -295,7 +295,9 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
         DEBUG( "NETWORK -- Received RWrite on (%p) with data %5s...", rwm.page, rwm.data);
         // Case of a resp node :
         // Integrate the write :
+        CHECK_CANARIES(rwm.page);
         memcpy( (char*)rwm.page + rwm.offset, rwm.data, rwm.size );
+        CHECK_CANARIES(rwm.page);
 
         // Then send ack :
         RWriteAck rwa;
@@ -465,13 +467,15 @@ void NetworkInterface::onGoTransient( MessageHdr &m ) {
 void NetworkInterface::onAskInvalidate( MessageHdr &m ){
         AskInvalidate &ai = *(AskInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( ai.page );
-
+        DEBUG( "Receiving AskInvalidate(on %p), orig=%d ", ai.page, ai.orig );
         if ( !IS_RESP( fheader )  ) {
+          // TODO : remove this line (aggressive testing)
+
           CFATAL(ai.orig == get_node_num(), "Forwarding loop.");
           forward( m, PAGE_GET_NEXT_RESP(ai.page) );
           return;
         } 
-
+        CHECK_CANARIES(ai.page);
         planify_invalidation( ai.page, ai.orig );
 
 }
@@ -479,6 +483,8 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
 void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         DoInvalidate &di = *(DoInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( di.page );
+
+        CHECK_CANARIES(di.page);
 
         DEBUG( "Received DoInvalidate(%p)", di.page);
         CFATAL( IS_RESP( fheader), "Cannot invalidate RESP" );
@@ -576,8 +582,8 @@ void NetworkInterface::onFreeMessage(MessageHdr &m) {
 
 
     FreeMessage &fm = *(FreeMessage*)m.data;
-    if ( !PAGE_IS_RESP(fm.page)) {
-        forward(m, PAGE_GET_NEXT_RESP(fm.page));
+    if ( mapper_who_owns(fm.page) != get_node_num()) {
+        FATAL( "Free message not addressed to owner...");
     }
 
     DEBUG( "FreeMessage Received for %p : freeing locally.", fm.page);
@@ -632,6 +638,7 @@ void NetworkInterface::send_do_invalidate( node_id_t target,  PageType page ) {
 }
 
 void NetworkInterface::send_ask_invalidate( node_id_t target, PageType page ) {
+        CFATAL( target==get_node_num(), "Attempting to invalidate locally by sending a message." );
         AskInvalidate ai;
         ai.page = page;
         ai.orig = get_node_num();
@@ -643,6 +650,7 @@ void NetworkInterface::send_ask_invalidate( node_id_t target, PageType page ) {
         m.data_size = sizeof( AskInvalidate );
         m.data = &ai;
 
+        DEBUG( "Sending AckInvalidate (%p), orig=%d", ai.page, ai.orig );
         send( m );
 }
 

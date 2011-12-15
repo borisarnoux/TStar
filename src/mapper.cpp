@@ -93,6 +93,7 @@ void * mapper_malloc(size_t len) {
 }
 
 void mapper_free( void * zone ) {
+    CFATAL( mapper_who_owns(zone) != get_node_num(), "Cannot free pointer out of zone( %p )", zone );
 #pragma omp critical (owm_heap)
 {
     local_heap->deallocate( zone );

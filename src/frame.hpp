@@ -51,7 +51,7 @@ extern "C" {
 // Canari related functions.
 #define CHECK_CANARIES( page ) \
     do { struct owm_frame_layout * fheader = GET_FHEADER(page);\
-    CFATAL( fheader->canari != CANARI || fheader->canari2 != CANARI, "Wrong canaries for page %p", page );\
+    CFATAL( fheader->canari != CANARI || fheader->canari2 != CANARI, "Wrong canaries for page %p (%x,%x)", page, fheader->canari, fheader->canari2 );\
 } while (0)
 
 

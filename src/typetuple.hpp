@@ -115,9 +115,13 @@ struct layout_descriptor_helper<pos, N,T, A...> {
   layout_descriptor_helper<pos+_round_toptrsize(sizeof(T)), A...> inner;
   
   layout_descriptor_helper() : inner() {
-	int & dyntype = *(int*)get_pos(pos);
-	dyntype = layout_type_to_data::get_dyn_type( (T*) NULL );
-        //printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
+        int bufsize = _round_toptrsize(sizeof(T));
+        // Fill all descriptions :
+        CFATAL( bufsize/sizeof(intptr_t) == 0, "Code broken, check assumption.");
+        for ( int i = 0; i < (int)(bufsize/sizeof(intptr_t)); ++i ) {
+            int & dyntype = *(int*)get_pos(pos+i*sizeof(intptr_t));
+            dyntype = layout_type_to_data::get_dyn_type( (T*) NULL );
+        }
   }
 
 
@@ -343,15 +347,23 @@ struct task_data_nocontext {
         //printf( "Taskdata_nocontext sc=%d (at %d) constructor : %u %u\n", sc, (intptr_t)&sc-(intptr_t)this,
         //                        sizeof(T1), sizeof(T2) );
                 static_data_p = &layout;
+                CFATAL( sizeof(T1) != 1 && T1::layout::length * sizeof(intptr_t) != sizeof(T1), "Assumption failed." );
+                fprintf( stderr, "Offset to sc %x\n", (intptr_t)args);
                 //fprintf( stderr, "Setting layout.\n");
     }
 
 
     struct static_task_data<T1,T2,Uniker> * static_data_p;
-    int sc;
+    long sc;
     union {
         struct {
             T1 needs;
+        };
+        struct {
+            // This construction serves to provide the correct
+            // layout in case of an empty "needs", otherwise it
+            // would introduce a one byte shift.
+            void* _alignment_placeholder[T1::layout::length];
             T2 provides;
         };
         void * args[static_task_data<T1,T2,Uniker>::length];
@@ -435,7 +447,7 @@ int task_data<T1,L>::dummy_counter_for_preserving_the_above_variable;
 
 template <typename T1, typename L>
 struct task_data<T1,L> * _create_task(int sc, L lambda)  {
-    size_t size = sizeof( task_data<T1,L>);
+    size_t size = sizeof( task_data<T1,L>)+64;
     return new( owm_malloc(size) ) task_data<T1,L>(sc, lambda);
 }
 
@@ -502,6 +514,8 @@ R& handle_get_arg( T1 h, T2 * d ) {
   struct frame_struct * &target  = T1->get_framep(vname(var1));\
     offset = ((intptr_t)&(T2->get_byname( vname(var2), (type *)NULL )) - (intptr_t)T2);\
   target = (struct frame_struct *) T2;\
+  DEBUG("BIND Target at %p", &target);\
+    \
 } while (0)
 
 #define bind_outout(T1, var1, nameloc )\
@@ -516,6 +530,7 @@ R& handle_get_arg( T1 h, T2 * d ) {
 #define provide( name, type, value )\
      do {\
     type &ref = *(type*) ((intptr_t)get_fra(name)+(intptr_t) get_off(name) );\
+    DEBUG("PROVIDE Target at %p, on page %p", &ref, get_fra(name));\
     if ( PAGE_IS_RESP(get_fra(name))) {\
         ref = value;\
     } else { \
@@ -523,7 +538,7 @@ R& handle_get_arg( T1 h, T2 * d ) {
         type varcopy = value;\
         tstar_twrite(NULL,get_fra(name),get_off(name), &varcopy, sizeof(type) );\
     }\
-    tstar_tdec( get_fra(name), NULL );\
+    tstar_tdec( get_fra(name), get_fra(name) );\
    } while(0)
 
 

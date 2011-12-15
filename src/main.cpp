@@ -434,7 +434,7 @@ fibentry_task * fibentry( int n ) {
 printer_task * printer() {
     return TASK(1, printer_task,
                 _code (
-                    DEBUG( "Result : %d\n", get_arg(ToPrint,int));
+                    DEBUG( "Result : %d", get_arg(ToPrint,int));
                     NetworkInterface::bcast_exit(0);
 
                     ) );

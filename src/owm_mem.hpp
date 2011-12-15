@@ -18,13 +18,16 @@ static inline void * owm_malloc( size_t size ) {
         retval->canari = CANARI;
         retval->canari2 = CANARI;
         retval->reserved = false;
-        CFATAL( (intptr_t) retval->data - (intptr_t) retval != sizeof(struct owm_frame_layout), "Layout invalid.");
+        CFATAL( (intptr_t) retval->data - (intptr_t) retval != sizeof(struct owm_frame_layout), "Layout invalid (packing issue).");
+        CHECK_CANARIES( retval->data );
+        DEBUG("Allocated : page %p", retval->data);
 	return retval->data;
 }
 
 static inline void owm_free_local( void * page ) {
         // Error if not called locally.
         CFATAL( mapper_who_owns(page) != get_node_num(), "Attempting to free pointer in a different location." );
+        CHECK_CANARIES(page);
         ask_or_do_invalidation_then( page, NULL);
         mapper_free( GET_FHEADER(page) );
 }
@@ -36,7 +39,7 @@ static inline void owm_free( void * page ) {
         owm_free_local(page);
     } else {
         DEBUG( "Freeing : %p, global pointer, sending message to %d.",page, PAGE_GET_NEXT_RESP(page));
-        NetworkInterface::send_free_message(PAGE_GET_NEXT_RESP(page), page);
+        NetworkInterface::send_free_message(mapper_who_owns(page), page);
     }
 
 }

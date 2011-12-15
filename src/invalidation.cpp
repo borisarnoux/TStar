@@ -144,13 +144,13 @@ void ask_or_do_invalidation_then(  void * page, Closure * c ) {
   } else {
       // Send message.
       // Register closure for invalidation arrival.
-      DEBUG( "Sending invalidation for %p", page);
+      DEBUG( "Sending invalidation ask for %p to %d", page, PAGE_GET_NEXT_RESP(page));
 
       if ( c != NULL ) {
           register_forinvalidateack(page, c);
       }
 
-      NetworkInterface::send_ask_invalidate( mapper_who_owns(page), page);
+      NetworkInterface::send_ask_invalidate( PAGE_GET_NEXT_RESP(page), page);
   }
 
   
