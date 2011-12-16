@@ -11,6 +11,9 @@
 static inline void * owm_malloc( size_t size ) {
 	// Allocates in private segment for data + header.
 	struct owm_frame_layout * retval =  (struct owm_frame_layout*) mapper_malloc( size + sizeof(struct owm_frame_layout) );
+#ifdef DEBUG_ADDITIONAL_CODE
+        mapper_valid_address_add( retval->data );
+#endif
 	retval->size = size;
         retval->proto_status = RESP;
         retval->usecount = 1;
@@ -18,9 +21,12 @@ static inline void * owm_malloc( size_t size ) {
         retval->canari = CANARI;
         retval->canari2 = CANARI;
         retval->reserved = false;
+        retval->freed = 0;
+
         CFATAL( (intptr_t) retval->data - (intptr_t) retval != sizeof(struct owm_frame_layout), "Layout invalid (packing issue).");
         CHECK_CANARIES( retval->data );
         DEBUG("Allocated : page %p", retval->data);
+
 	return retval->data;
 }
 
@@ -28,8 +34,21 @@ static inline void owm_free_local( void * page ) {
         // Error if not called locally.
         CFATAL( mapper_who_owns(page) != get_node_num(), "Attempting to free pointer in a different location." );
         CHECK_CANARIES(page);
-        ask_or_do_invalidation_then( page, NULL);
+        if ( GET_FHEADER(page)->freed == 1 ) {
+            FATAL( "Double free (%p)", page);
+        }
+        // We could make the conservative assumption that we can free
+        // Only after the page is invalidated. (TODO)
+
+        auto dofree_closure = new_Closure( 1,
         mapper_free( GET_FHEADER(page) );
+        #ifdef DEBUG_ADDITIONAL_CODE
+                              mapper_valid_address_rm( page );
+        #endif
+         );
+
+        ask_or_do_invalidation_then( page, dofree_closure);
+
 }
 
 static inline void owm_free( void * page ) {

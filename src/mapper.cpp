@@ -10,10 +10,37 @@
 #include <stdint.h>
 
 #include <misc.h>
+#include <set>
 
 #include "mapper.h"
 
 #define PAGE_LEN 4096
+
+#ifdef DEBUG_ADDITIONAL_CODE
+std::set<void*> valid_pages_set;
+
+void mapper_valid_address_add( void * ptr ) {
+    valid_pages_set.insert(ptr);
+}
+void mapper_valid_address_check( void * ptr ) {
+    if ( valid_pages_set.find(ptr) == valid_pages_set.end() ) {
+        FATAL( "Pointer %p was not in valid set.", ptr);
+    }
+}
+void mapper_valid_address_rm( void * ptr)  {
+    mapper_valid_address_check(ptr);
+    valid_pages_set.erase(ptr);
+}
+
+__attribute__((destructor))
+void mapper_exit_check() {
+    if ( ! valid_pages_set.empty() ) {
+        DEBUG("Warning !! Not all locally allocated pages were freed.");
+    }
+}
+
+
+#endif
 
 
 bool initialized = false;
@@ -83,20 +110,28 @@ int mapper_who_owns( void * ptr ) {
 
 void * mapper_malloc(size_t len) {
     void * retval = NULL;
+    CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
 #pragma omp critical (owm_heap)
 {
 
     retval = local_heap->allocate( len );
 }
     CFATAL( retval == 0, "No memory left.");
+
     return retval;
 }
 
 void mapper_free( void * zone ) {
     CFATAL( mapper_who_owns(zone) != get_node_num(), "Cannot free pointer out of zone( %p )", zone );
+    CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
+
 #pragma omp critical (owm_heap)
 {
     local_heap->deallocate( zone );
 }
 }
 
+void mapper_check_sanity() {
+    CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
+
+}

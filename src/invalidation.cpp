@@ -178,7 +178,7 @@ void planify_invalidation( void *page, node_id_t client ) {
 void invalidate_and_do ( void * page, Closure * c ) {
   
   // Check if page is RESP mode :
-  //
+    CFATAL( !PAGE_IS_RESP(page), "Invalidate_and_do must only be activated on RESP pages.");
   
   
   RespSharedMapRange range = resp_shared_map.equal_range(page);
@@ -195,6 +195,7 @@ void invalidate_and_do ( void * page, Closure * c ) {
 
     NetworkInterface::send_do_invalidate( target, page );
   }
+  resp_shared_map.erase(range.first,range.second);
 
   // The rest is for triggering in case of c!= NULL
   if ( c == NULL ) {
@@ -208,9 +209,9 @@ void invalidate_and_do ( void * page, Closure * c ) {
 
   // Todo ; optitimize with a tincr...
 
-  Closure * continuer = new_Closure( total_to_wait, 
+  Closure * continuer = new_Closure( total_to_wait,
 
-	  (*c).tdec();
+          (*c).tdec();
 
   );
   

@@ -27,12 +27,16 @@ struct DWrite {
     void * frame;
     size_t offset;
     size_t len;
-    std::auto_ptr<char> buffer;
+    char * buffer;
     DWrite(void * _o, void * _f, size_t _offset, void * _buf, size_t _l) :
         obj(_o),frame(_f),offset(_offset),len(_l),buffer(new char[_l]) {
-        memcpy( buffer.get(), _buf, _l);
+        CFATAL( _l <= 0, "Invalid write buffer size." );
+        memcpy( buffer, _buf, _l);
     }
 
+    ~DWrite() {
+        delete[] buffer;
+    }
 
 };
 

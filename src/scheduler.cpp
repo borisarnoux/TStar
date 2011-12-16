@@ -140,7 +140,7 @@ void ExecutionUnit::process_commits() {
 
         // Finally, we do the writes :
         for ( auto i = frame_dwrites.begin(); i!=frame_dwrites.end(); ++i) {
-            ask_or_do_rwrite_then((*i)->frame, (*i)->offset,(*i)->buffer.get(), (*i)->len, on_write_commits);
+            ask_or_do_rwrite_then((*i)->frame, (*i)->offset,(*i)->buffer, (*i)->len, on_write_commits);
             delete *i;
 
         }

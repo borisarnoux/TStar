@@ -2,6 +2,8 @@
 #define TSTARIFACE_H
 
 #include <stdlib.h>
+#include <stdint.h>
+#include <misc.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +11,10 @@ extern "C" {
 
 
 struct frame_struct {
+#ifdef DEBUG_ADDITIONAL_CODE
+  // TODO : remove it.
+  uint32_t canaribuf[10];
+#endif
   struct static_data * static_data;
   long sc;
   void* args[];

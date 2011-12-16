@@ -5,6 +5,7 @@
 #include <identifiers.h>
 
 #include <tstariface.h>
+#include <mapper.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,7 +47,9 @@ extern "C" {
 #define PAGE_HAS_ZERO_COUNT( page ) HAS_ZERO_COUNT( GET_FHEADER(page))
 #define PAGE_IS_MALFORMED( page ) IS_MALFORMED( GET_FHEADER(page))
 
-#define GET_FHEADER( page ) ((struct owm_frame_layout*)((intptr_t)(page) - sizeof(struct owm_frame_layout)))
+#define GET_FHEADER( page ) __get_fheader( page )
+
+
 
 // Canari related functions.
 #define CHECK_CANARIES( page ) \
@@ -69,14 +72,20 @@ struct owm_frame_layout {
 	int proto_status; // Fresh, Invalid, TransientWriter, Responsible.
 	node_id_t next_resp;
         int reserved;
+        int freed;
         int canari2;
 
 	char data[]; 
 } __attribute__((__packed__));
 
+static inline owm_frame_layout * __get_fheader( void * page ) {
+    if ( mapper_who_owns(page)==get_node_num()) {
+        mapper_valid_address_check(page);
+    }
+    return (struct owm_frame_layout*)((intptr_t)(page) - sizeof(struct owm_frame_layout));
+}
 
 
-extern int mapper_who_owns( void * ptr );
 
 static inline node_id_t get_next_resp(owm_frame_layout*fheader) {
     // Change the code of this

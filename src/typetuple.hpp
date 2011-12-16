@@ -350,9 +350,20 @@ struct task_data_nocontext {
                 CFATAL( sizeof(T1) != 1 && T1::layout::length * sizeof(intptr_t) != sizeof(T1), "Assumption failed." );
                 fprintf( stderr, "Offset to sc %x\n", (intptr_t)args);
                 //fprintf( stderr, "Setting layout.\n");
+#ifdef DEBUG_ADDITIONAL_CODE
+
+                for ( int i = 0; i < 10; ++i ) {
+                    canaribuf[i] = 0xdeadbee0 + i;
+                }
+
+                mapper_valid_address_check( this );
+#endif
     }
 
 
+#ifdef DEBUG_ADDITIONAL_CODE
+    uint32_t canaribuf[10];
+#endif
     struct static_task_data<T1,T2,Uniker> * static_data_p;
     long sc;
     union {
@@ -383,6 +394,7 @@ struct task_data_nocontext {
 
     template <typename N>
     inline frame_struct * & get_framep( N d ) {
+
         return provides.get_framep( d );
     }
 
@@ -430,6 +442,11 @@ struct task_data : public T1 {
     static void exec_lambda() {
         struct task_data<T1,L> * t = (struct task_data<T1,L> *) tstar_getcfp();
         t->lambda();
+
+        // TODO : Remove it.
+        for ( int i = 0; i < 10; ++i ) {
+            CFATAL( t->canaribuf[i] != 0xdeadbee0 + i, "Canari %d check failed.", i );
+        }
     }
 
 
@@ -447,7 +464,7 @@ int task_data<T1,L>::dummy_counter_for_preserving_the_above_variable;
 
 template <typename T1, typename L>
 struct task_data<T1,L> * _create_task(int sc, L lambda)  {
-    size_t size = sizeof( task_data<T1,L>)+64;
+    size_t size = sizeof( task_data<T1,L>);
     return new( owm_malloc(size) ) task_data<T1,L>(sc, lambda);
 }
 

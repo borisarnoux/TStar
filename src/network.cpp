@@ -14,6 +14,7 @@
 #include <owm_mem.hpp>
 #include <scheduler.hpp>
 
+
 struct DataMessage {
   void * page;
   size_t size;
@@ -213,25 +214,23 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
       struct owm_frame_layout *fheader = 
                   GET_FHEADER(drm.page);
       DEBUG( "NETWORK : Received DataMessage : page %p, size : %d", drm.page,(int)drm.size);
+      CFATAL( PAGE_IS_RESP(drm.page), "Receiving and processing data message while resp...");
+      CFATAL( PAGE_IS_VALID(drm.page), "Overwriting a valid copy on %p", drm.page);
 
-        fheader->size = drm.size;
+      fheader->size = drm.size;
 
-        // Error if not invalid 
-        if ( ! IS_INVALID( fheader ) ) {
-          FATAL( "Violated hypothesis : no transient writers receive data" );
-        } 
 
-        // Finally copy :
-        memcpy( drm.page, drm.data, drm.size );
-        // Make it valid :
-        VALIDATE( fheader );
-        fheader->canari = CANARI;
-        fheader->canari2 = CANARI;
-        fheader->next_resp = m.from;
+       // Finally copy :
+       memcpy( drm.page, drm.data, drm.size );
+       // Make it valid :
+       VALIDATE( fheader );
+       fheader->canari = CANARI;
+       fheader->canari2 = CANARI;
+       fheader->next_resp = m.from;
 
-        // Signal data arrived :
-        CFATAL ( !PAGE_IS_AVAILABLE(drm.page), "Inconsistent validation");
-        signal_data_arrival( drm.page );
+       // Signal data arrived :
+       CFATAL ( !PAGE_IS_AVAILABLE(drm.page), "Inconsistent validation");
+       signal_data_arrival( drm.page );
 }
 
 void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
@@ -253,11 +252,10 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
           return;
         }
 
-        DEBUG( " NETWORK -- DataReqMessage Received : page %p from %d", drm.page, drm.orig );
+        DEBUG( " NETWORK -- DataReqMessage Received : page %p from %d (sizeofpage=%d)", drm.page, drm.orig, (int)fheader->size );
 
         // Build an answer.
         DataMessage & resp = *((DataMessage*) new char[sizeof(DataMessage) +fheader->size] );
-        DEBUG( "Answer size for data for page %p is %lu", drm.page, (long unsigned int )(sizeof(DataMessage) + fheader->size) );
         resp.size = fheader->size;
         resp.page = drm.page;
 
@@ -275,7 +273,7 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
 
         send( resphdr );
         // TODO : replace with smart pointer...
-        delete &resp;
+        delete[] (char*)&resp;
         // Then add the recipient to the shared list of nodes :
         // see invalidation.cpp
         register_copy_distribution( drm.page, drm.orig );
@@ -292,11 +290,15 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
           return;
         }
 
-        DEBUG( "NETWORK -- Received RWrite on (%p) with data %5s...", rwm.page, rwm.data);
+        DEBUG( "NETWORK -- Received RWrite on (%p) : overwriting [%p .. %p] (size=%d)", rwm.page,
+                                                                                        (char*)rwm.page+rwm.offset,
+               (char *)rwm.page + rwm.offset+rwm.size, (int) rwm.size         );
         // Case of a resp node :
         // Integrate the write :
         CHECK_CANARIES(rwm.page);
+        mapper_check_sanity();
         memcpy( (char*)rwm.page + rwm.offset, rwm.data, rwm.size );
+        mapper_check_sanity();
         CHECK_CANARIES(rwm.page);
 
         // Then send ack :
@@ -341,6 +343,10 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
           CFATAL(rwrm.orig == get_node_num(), "Forwarding loop.");
           forward( m, PAGE_GET_NEXT_RESP(rwrm.page) );
           return;
+        }
+        CHECK_CANARIES(rwrm.page);
+        if ( get_node_num() == mapper_who_owns(rwrm.page) && fheader->freed) {
+            FATAL( "Attempting to transfer resp of a freed zone.");
         }
         // If this page has no current writers :
         if ( HAS_ZERO_COUNT( fheader ) ) {
@@ -476,6 +482,10 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
           return;
         } 
         CHECK_CANARIES(ai.page);
+
+        if ( get_node_num() == mapper_who_owns(ai.page) && GET_FHEADER(ai.page)->freed ) {
+            FATAL( "Asking invalidation of freed page (passed canari test).");
+        }
         planify_invalidation( ai.page, ai.orig );
 
 }
@@ -488,8 +498,7 @@ void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
 
         DEBUG( "Received DoInvalidate(%p)", di.page);
         CFATAL( IS_RESP( fheader), "Cannot invalidate RESP" );
-        CFATAL( IS_TRANSIENT( fheader ), "No transitive message should be received");
-
+        CFATAL( IS_INVALID(fheader), "Cannot invalidate Invalid : double invalidation.");
         INVALIDATE( fheader );
 
 
@@ -515,6 +524,8 @@ void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
         if ( !IS_RESP( fheader ) ) {
           // Then resp is the sender :
           //CFATAL( ! fheader->initialized, "Unitinialized data shouldn't receive InvalidateAck");
+          // This line forbids freeing before invalidation : it would corrupt memory on an
+          // owner who would have transferred his rights.
           fheader->next_resp = m.from;
         }
 

@@ -24,6 +24,7 @@ void set_current_color( int color );
 #define CONCAT2(A,B) A##B
 #define CONCAT3(A,B,C) A##B##C
 
+#define DEBUG_ADDITIONAL_CODE 1
 
 #define __packed __attribute__((packed))
 #define hidden_attr __attribute__((visibility("hidden")))

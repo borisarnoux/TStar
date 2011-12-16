@@ -422,7 +422,14 @@ fibentry_task * fibentry( int n ) {
 
                     bind(fe1, FibOut, ad, A, int);
                     bind(fe2, FibOut, ad, B, int);
+#ifdef DEBUG_ADDITIONAL_CODE
+                      mapper_valid_address_check(fe1->get_framep(vname(FibOut)) );
+#endif
+#ifdef DEBUG_ADDITIONAL_CODE
+                      mapper_valid_address_check(fe2->get_framep(vname(FibOut)) );
+#endif
                     bind_outout( ad, AddOut, FibOut);
+
                     tstar_tdec(fe2, NULL);
                     tstar_tdec(fe1, NULL);
                     tstar_tdec(ad, NULL);
@@ -449,7 +456,9 @@ fibclient_task * fibclient(int n) {
                       printer_task * p0 = printer();
 
                       bind(fib0, FibOut, p0, ToPrint, int );
-
+#ifdef DEBUG_ADDITIONAL_CODE
+                      mapper_valid_address_check(fib0->get_framep(vname(FibOut)) );
+#endif
                       tstar_tdec(fib0,NULL);
                      )
                  );

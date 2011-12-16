@@ -4,3 +4,9 @@
 * When the RESP_TRANSFER occur, do the incrementations of use count in the triggered closures.
 
 * IMPORTANT : Resp transfer & deadlock...
+
+* At least two problems with invalidation set :
+   * it is not updated properly.
+   * the closures in do_invalidate are not correct.
+
+* Problem with state checks on data arrival ( suppress them ?)

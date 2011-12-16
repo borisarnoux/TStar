@@ -4,6 +4,7 @@
 #include <string.h>
 #include<stdlib.h>
 #include <stdio.h>
+#include <misc.h>
 
 static inline int hashint(int key) {
   int c2=0x27d4eb2d; // a prime or an odd constant
@@ -30,6 +31,7 @@ static inline int hashzone( void * _z, size_t size) {
 
   if ( size > 0 ) {
     int holder = 0;
+    CFATAL(size>sizeof(int), "Assumption failed.");
     memcpy ( &holder, z, size );
     r += holder;
     r = hashint( r );
