@@ -29,7 +29,9 @@ void mapper_valid_address_check( void * ptr ) {
 #pragma omp critical (valcheck)
     {
     if ( valid_pages_set.find(ptr) == valid_pages_set.end() ) {
-        FATAL( "Pointer %p was not in valid set.", ptr);
+        current_color = 33;
+        DEBUG( "WARNING ! Pointer %p was not in valid set.", ptr);
+        current_color = 0;
     }
     }
 }
