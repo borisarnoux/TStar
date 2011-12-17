@@ -103,8 +103,8 @@ int tstar_main( struct frame_struct* first_task) {
                 DEBUG( "Launching main task on node : %d ", get_node_num());
                 sched->schedule_global( first_task);
 
-            }
-}
+            } // END omp single
+} // END omp parallel
     } else {
        // Create a dummy task :
         dummy_task * dt = TASK( 1, dummy_task, _code(
@@ -119,9 +119,9 @@ int tstar_main( struct frame_struct* first_task) {
              sched->schedule_global( (struct frame_struct*)dt);
 
 
-}
+} // END omp single
 
-}
+} // END omp parallel
     }
 
 

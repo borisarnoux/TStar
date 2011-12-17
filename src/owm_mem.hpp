@@ -10,7 +10,13 @@
 
 static inline void * owm_malloc( size_t size ) {
 	// Allocates in private segment for data + header.
-	struct owm_frame_layout * retval =  (struct owm_frame_layout*) mapper_malloc( size + sizeof(struct owm_frame_layout) );
+        struct owm_frame_layout * retval =
+                (struct owm_frame_layout*) mapper_malloc( size +
+                                                          sizeof(struct owm_frame_layout)
+                                          #ifdef DEBUG_ADDITIONAL_CODE
+                                                          + sizeof(int) // For the canari at the end.
+                                          #endif
+                                                          );
 #ifdef DEBUG_ADDITIONAL_CODE
         mapper_valid_address_add( retval->data );
 #endif
@@ -27,6 +33,10 @@ static inline void * owm_malloc( size_t size ) {
         CHECK_CANARIES( retval->data );
         DEBUG("Allocated : page %p", retval->data);
 
+#if DEBUG_ADDITIONAL_CODE
+        int * ending_canari = (int*)((intptr_t)retval->data+size);
+        *ending_canari = CANARI;
+#endif
 	return retval->data;
 }
 
@@ -34,6 +44,10 @@ static inline void owm_free_local( void * page ) {
         // Error if not called locally.
         CFATAL( mapper_who_owns(page) != get_node_num(), "Attempting to free pointer in a different location." );
         CHECK_CANARIES(page);
+#if DEBUG_ADDITIONAL_CODE
+        int * ending_canari = (int*)((intptr_t)page + (intptr_t)(GET_FHEADER(page))->size);
+        CFATAL( *ending_canari != CANARI, "Modified ending canari !!");
+#endif
         if ( GET_FHEADER(page)->freed == 1 ) {
             FATAL( "Double free (%p)", page);
         }
@@ -47,7 +61,9 @@ static inline void owm_free_local( void * page ) {
         #endif
          );
 
-        ask_or_do_invalidation_then( page, dofree_closure);
+        DELEGATE( Delegator::default_delegator,
+                  ask_or_do_invalidation_then( page, dofree_closure);
+                );
 
 }
 

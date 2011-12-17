@@ -128,11 +128,11 @@ class NetworkInterface : public NetworkLowLevel {
     static void onStolenMessage( MessageHdr &m );
     static void onFreeMessage(MessageHdr &m);
       /*------------ Functions for sending messages---------------------- */
-    static void send_invalidate_ack( node_id_t target, PageType page );
+    static void send_invalidate_ack( node_id_t target, PageType page, serial_t serial );
 
-    static void send_do_invalidate( node_id_t target, PageType page );
+    static void send_do_invalidate( node_id_t target, PageType page, serial_t serial );
 
-    static void send_ask_invalidate( node_id_t target,  PageType page );
+    static void send_ask_invalidate( node_id_t target,  PageType page, serial_t serial );
 
     static void send_data_req( node_id_t target,  void * page );
 

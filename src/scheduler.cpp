@@ -103,14 +103,16 @@ void ExecutionUnit::process_commits() {
 
         // Then come the special case where there are no writes.
         if ( frame_dwrites.empty() ) {
-            DEBUG ("Ressource %p, no writes, invalidation & TDecs to do.", current_value);
+            DEBUG ("Ressource %p has no writes doing TDecs right away.", current_value);
             // Commits the tdecs immediately after invalidation :
 
             if ( current_type == FATP_TYPE ) {
                 ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
             } else if ( current_type == W_FRAME_TYPE ||
                 current_type == RW_FRAME_TYPE ) {
-                ask_or_do_invalidation_then(current_value, dotdecs );
+                DELEGATE( Delegator::default_delegator,
+                          ask_or_do_invalidation_then(current_value, dotdecs );
+                        );
             }
 
 
@@ -130,10 +132,14 @@ void ExecutionUnit::process_commits() {
 
         Closure *  on_write_commits = new_Closure ( frame_dwrites.size(),
               if ( current_type == FATP_TYPE ) {
+                  // TODO : certainly delegate this.
                   ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
               } else if ( current_type == W_FRAME_TYPE ||
                   current_type == RW_FRAME_TYPE ) {
-                  ask_or_do_invalidation_then(current_value, dotdecs );
+                    DELEGATE(
+                        Delegator::default_delegator,
+                        ask_or_do_invalidation_then(current_value, dotdecs );
+                      );
               }
 
         );

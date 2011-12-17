@@ -10,3 +10,7 @@
    * the closures in do_invalidate are not correct.
 
 * Problem with state checks on data arrival ( suppress them ?)
+
+* Maybe RESP must not be transferred when an invalidation is in process
+  ( because of the closures :p)
+* FIXME : in rare cases, serial generation could overlap between threads

@@ -132,6 +132,9 @@ void mapper_free( void * zone ) {
 }
 
 void mapper_check_sanity() {
-    CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
+#pragma omp critical (owm_heap)
+{
+        CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
+}
 
 }

@@ -57,15 +57,18 @@ struct GoTransient {
 
 struct AckInvalidate {
   void * page;
+  serial_t serial;
 };
 
 struct DoInvalidate {
   void * page;
+  serial_t serial;
 };
 
 struct AskInvalidate {
   node_id_t orig;
   void * page;
+  serial_t serial;
 };
 
 struct TDec {
@@ -486,7 +489,7 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
         if ( get_node_num() == mapper_who_owns(ai.page) && GET_FHEADER(ai.page)->freed ) {
             FATAL( "Asking invalidation of freed page (passed canari test).");
         }
-        planify_invalidation( ai.page, ai.orig );
+        planify_invalidation( ai.page, ai.serial, ai.orig );
 
 }
 
@@ -505,6 +508,7 @@ void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         // Respond do invalidate.
         AckInvalidate ackinvalidate;
         ackinvalidate.page = di.page;
+        ackinvalidate.serial = di.serial;
 
         MessageHdr resp;
         resp.from = get_node_num();
@@ -529,7 +533,7 @@ void NetworkInterface::onAckInvalidate( MessageHdr &m ) {
           fheader->next_resp = m.from;
         }
 
-        signal_invalidation_ack(  acki.page );
+        signal_invalidation_ack(  acki.page, acki.serial );
 }
 
 
@@ -606,20 +610,18 @@ void NetworkInterface::onFreeMessage(MessageHdr &m) {
 
 
 /*------------ Functions for sending messages---------------------- */
-void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page ) {
+void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page, serial_t serial ) {
         if ( target == get_node_num() ) {
           // Just trigger the invalidation as done locally.
-          DEBUG("Sending a message locally : this might be a bug");
-          signal_invalidation_ack(  page );
+          FATAL("Sending a message locally : this must be a bug");
           return;
-	  
-
         }
 
 
         //  Or actually send the message.
         AckInvalidate ai;
         ai.page = page;
+        ai.serial = serial;
 
         MessageHdr m;
         m.from = get_node_num();
@@ -633,9 +635,10 @@ void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page ) {
 } 
 
 
-void NetworkInterface::send_do_invalidate( node_id_t target,  PageType page ) {
+void NetworkInterface::send_do_invalidate( node_id_t target,  PageType page, serial_t serial ) {
         DoInvalidate di;
         di.page = page;
+        di.serial = serial;
 
         MessageHdr m;
         m.from = get_node_num();
@@ -648,11 +651,12 @@ void NetworkInterface::send_do_invalidate( node_id_t target,  PageType page ) {
         
 }
 
-void NetworkInterface::send_ask_invalidate( node_id_t target, PageType page ) {
+void NetworkInterface::send_ask_invalidate( node_id_t target, PageType page, serial_t serial ) {
         CFATAL( target==get_node_num(), "Attempting to invalidate locally by sending a message." );
         AskInvalidate ai;
         ai.page = page;
         ai.orig = get_node_num();
+        ai.serial = serial;
         
         MessageHdr m;
         m.from = get_node_num();

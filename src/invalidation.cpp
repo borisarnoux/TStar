@@ -23,8 +23,20 @@ typedef std::multimap<PageType,node_id_t> RespSharedMap;
 typedef std::pair<RespSharedMap::iterator,RespSharedMap::iterator> RespSharedMapRange;
 typedef RespSharedMap::value_type RespSharedMapElt;
 
+typedef std::pair<PageType,serial_t> InvAckPair;
 
-TaskMapper<PageType> invalidation_tm(2, "Invalidation Mapper");
+static __thread int invalidation_tm_counter = 0;
+static int invalidation_tm_getserial() {
+    int ticket = invalidation_tm_counter;
+    ticket *= get_num_threads();
+    ticket += get_thread_num();
+
+    invalidation_tm_counter++;
+
+    return ticket;
+}
+
+TaskMapper<InvAckPair> invalidation_tm(2, "Invalidation Mapper");
 
 // This multimap contains the nodes considering their copy of page
 // valid, by page. It should not contain any page the local node is
@@ -34,15 +46,31 @@ RespSharedMap resp_shared_map;
 // individual set.
 
 void register_copy_distribution( void * page, node_id_t nodeid ) {
+#if DEBUG_ADDITIONAL_CODE
+  delegator_only();
+#endif
   resp_shared_map.insert( RespSharedMapElt(page, nodeid) );   
 }
 
 
-void signal_invalidation_ack( PageType page ) {
-    invalidation_tm.signal_evt(page);
+void signal_invalidation_ack( PageType page, serial_t s ) {
+#if DEBUG_ADDITIONAL_CODE
+  delegator_only();
+#endif
+    invalidation_tm.signal_evt(InvAckPair(page, s));
+}
+
+void register_forinvalidateack( PageType page, serial_t s, Closure * c ) {
+#if DEBUG_ADDITIONAL_CODE
+  delegator_only();
+#endif
+    invalidation_tm.register_evt( InvAckPair(page,s), c );
 }
 
 long long export_and_clear_shared_set( void * page ) {
+#if DEBUG_ADDITIONAL_CODE
+  delegator_only();
+#endif
   RespSharedMapRange r = resp_shared_map.equal_range(page);
 
   long long retval = 0;
@@ -58,6 +86,9 @@ long long export_and_clear_shared_set( void * page ) {
 }
 
 void shared_set_load_bit_map( void * page,long long bitmap ) {
+#if DEBUG_ADDITIONAL_CODE
+  delegator_only();
+#endif
   ASSERT( sizeof(bitmap) >= 8);
   for ( int i = 0; i < 64; ++ i ) {
     if ( (bitmap & 1<<i)
@@ -71,9 +102,6 @@ void shared_set_load_bit_map( void * page,long long bitmap ) {
 
 
 
-void register_forinvalidateack(  void * page, Closure * c ) {
-  invalidation_tm.register_evt(  page, c );
-}
 
 
 
@@ -81,7 +109,9 @@ void register_forinvalidateack(  void * page, Closure * c ) {
 
 
 void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
-  // TODO : mark as delegator only.
+#if DEBUG_ADDITIONAL_CODE
+  delegator_only();
+#endif
   // Because p is a fat pointer,
   // it is supposed to stay valid until this point.
   CFATAL( !PAGE_IS_AVAILABLE(p), "Illegal invalid fat pointer.");
@@ -135,6 +165,9 @@ void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
 
 
 void ask_or_do_invalidation_then(  void * page, Closure * c ) {
+#if DEBUG_ADDITIONAL_CODE
+  delegator_only();
+#endif
   // Note c == null means no register closure.
 
   if ( PAGE_IS_RESP( page ) ) {
@@ -146,11 +179,12 @@ void ask_or_do_invalidation_then(  void * page, Closure * c ) {
       // Register closure for invalidation arrival.
       DEBUG( "Sending invalidation ask for %p to %d", page, PAGE_GET_NEXT_RESP(page));
 
+      serial_t s = invalidation_tm_getserial();
       if ( c != NULL ) {
-          register_forinvalidateack(page, c);
+          register_forinvalidateack(page, s, c);
       }
 
-      NetworkInterface::send_ask_invalidate( PAGE_GET_NEXT_RESP(page), page);
+      NetworkInterface::send_ask_invalidate( PAGE_GET_NEXT_RESP(page), page, s);
   }
 
   
@@ -158,13 +192,13 @@ void ask_or_do_invalidation_then(  void * page, Closure * c ) {
 
 
 // This function answers a remote invalidation demand.
-void planify_invalidation( void *page, node_id_t client ) {
+void planify_invalidation( void *page, serial_t s, node_id_t client ) {
   CFATAL ( ! PAGE_IS_RESP( page ), "planify invalidation is to be executed on RESP only." );
 
   // Then we add a closure which will respond to the client :
   auto continuer = new_Closure( 1,
 
-        NetworkInterface::send_invalidate_ack( client, page );
+        NetworkInterface::send_invalidate_ack( client, page,s );
        );
 
   
@@ -176,50 +210,48 @@ void planify_invalidation( void *page, node_id_t client ) {
 // a do invalidate message to the members of the shared set.
 // When
 void invalidate_and_do ( void * page, Closure * c ) {
-  
+  delegator_only();
   // Check if page is RESP mode :
-    CFATAL( !PAGE_IS_RESP(page), "Invalidate_and_do must only be activated on RESP pages.");
+  CFATAL( !PAGE_IS_RESP(page), "Invalidate_and_do must only be activated on RESP pages.");
   
   
   RespSharedMapRange range = resp_shared_map.equal_range(page);
 
+  int total_to_wait =
+          std::count_if(range.first,
+                        range.second,
+                        [](RespSharedMapElt e){return true;});
 
-  int total_to_wait = 0;
+  if ( total_to_wait == 0 ) {
+    // We cannot rely on any event then :
+    if ( c != NULL ) {
+        (*c).tdec();
+    }
+    return;
+  }
+
+  Closure * continuer = NULL;
+  if ( c!= NULL ) {
+  continuer = new_Closure( total_to_wait,
+            CFATAL( c == NULL, "NULL Closure invalid here." );
+            (*c).tdec();
+
+  );
+  }
+
   for ( auto i = range.first; i != range.second; ++i ) {
+    // We need a serial:
+    serial_t s = invalidation_tm_getserial();
 
     // This loops onto the holders of a valid copy.
     node_id_t target = i->second;
+    if ( c != NULL ) {
+        register_forinvalidateack( page, s, continuer );
+    }
 
-    // We need to notify them and wait for their answers ( INVALIDATE_ACK )
-    total_to_wait += 1;
-
-    NetworkInterface::send_do_invalidate( target, page );
+    NetworkInterface::send_do_invalidate( target, page, s);
   }
   resp_shared_map.erase(range.first,range.second);
-
-  // The rest is for triggering in case of c!= NULL
-  if ( c == NULL ) {
-      return;
-  }
-
-  // We can avoid setting up :
-  if ( total_to_wait == 0 ) {
-    c->tdec();
-  }
-
-  // Todo ; optitimize with a tincr...
-
-  Closure * continuer = new_Closure( total_to_wait,
-
-          (*c).tdec();
-
-  );
-  
-  // And we register it into the invalidate_ack map :
-  for ( int i = 0; i < total_to_wait; ++i ) {
-    register_forinvalidateack( page, continuer );
-  }
-  
 
 }
 
