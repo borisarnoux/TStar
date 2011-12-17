@@ -50,7 +50,7 @@ struct locator_layout_descriptor_helper<pos,N, T> {
   char buffer[pos+_round_toptrsize(sizeof(coords))];
 
   locator_layout_descriptor_helper() {
-	int * dtp = (int*)get_pos(pos);
+        long * dtp = (long*)get_pos(pos);
 	dtp[0] = layout_type_to_data::get_dyn_type( (struct wo_frame *) NULL );
 	dtp[1] = layout_type_to_data::get_dyn_type( (char *) NULL );
         //printf( "Layout set elt at pos %d : %d, and %d\n", pos, dtp[0],dtp[1] );
@@ -67,7 +67,7 @@ struct locator_layout_descriptor_helper<pos, N,T, A...> {
   locator_layout_descriptor_helper<pos+_round_toptrsize(sizeof(coords)), A...> inner;
   
   locator_layout_descriptor_helper() : inner() {
-        int * dyntype = (int*)get_pos(pos);
+        long * dyntype = (long*)get_pos(pos);
         dyntype[0] = layout_type_to_data::get_dyn_type( (struct wo_frame *) NULL  );
         dyntype[1] = layout_type_to_data::get_dyn_type( (char *) NULL );
         //printf( "Layout set elt at pos %d : %d\n", pos, dyntype );
@@ -348,7 +348,6 @@ struct task_data_nocontext {
         //                        sizeof(T1), sizeof(T2) );
                 static_data_p = &layout;
                 CFATAL( sizeof(T1) != 1 && T1::layout::length * sizeof(intptr_t) != sizeof(T1), "Assumption failed." );
-                fprintf( stderr, "Offset to sc %x\n", (intptr_t)args);
                 //fprintf( stderr, "Setting layout.\n");
 #ifdef DEBUG_ADDITIONAL_CODE
 
@@ -416,28 +415,31 @@ template <typename T1, typename L>
 struct task_data : public T1 {
     task_data(int sc, L _lambda) : T1(sc), lambda(_lambda) {
                 //printf( "Taskdata with context :" " %u\n", sizeof(L) )
-        dummy_counter_for_preserving_the_above_variable += (intptr_t) &static_constructor_trigger_for_function_pointer;
+        _for_preserving_static_data += (intptr_t) &_initval;
     }
-    // By introducing a singleton struct here
-    // We make sure regardless of the node we are on
-    // The static data will be updated with the method pointer.
-    // we cannot do that in the task_data itself because of
-    // the lambda, that forbids any default construction.
-    // (ouch, that's a bit complicated )
 
-    struct for_constructor {
-        for_constructor() {
+    struct _init {
+
+        // By introducing a singleton struct here
+        // We make sure regardless of the node we are on
+        // The static data will be updated with the method pointer.
+        // we cannot do that in the task_data itself because of
+        // the lambda, that forbids any default construction.
+        // (ouch, that's a bit complicated, but its a default
+        // static constructor pattern)
+
+        _init() {
             if ( T1::layout.fn != NULL ) {
                 fprintf(stderr, "Double initialization of %s : exiting.\n", typeid(task_data<T1,L>).name());
                 exit( EXIT_FAILURE);
             }
-            fprintf(stderr, "Setting function pointer for %s : at (%p).\n", typeid(T1).name(), &T1::layout.fn);
+            //fprintf(stderr, "Setting function pointer for %s : at (%p).\n", typeid(T1).name(), &T1::layout.fn);
 
             T1::layout.fn = &exec_lambda;
         }
     };
-    static for_constructor static_constructor_trigger_for_function_pointer;
-    static int dummy_counter_for_preserving_the_above_variable;
+    static _init _initval;
+    static intptr_t _for_preserving_static_data;
 
     static void exec_lambda() {
         struct task_data<T1,L> * t = (struct task_data<T1,L> *) tstar_getcfp();
@@ -456,11 +458,13 @@ struct task_data : public T1 {
 
 };
 
+
+// Here is the allocation for the init constructor.
 template <typename T1, typename L>
-typename task_data<T1,L>::for_constructor task_data<T1,L>::static_constructor_trigger_for_function_pointer;
+typename task_data<T1,L>::_init task_data<T1,L>::_initval;
 
 template <typename T1, typename L>
-int task_data<T1,L>::dummy_counter_for_preserving_the_above_variable;
+intptr_t task_data<T1,L>::_for_preserving_static_data;
 
 template <typename T1, typename L>
 struct task_data<T1,L> * _create_task(int sc, L lambda)  {

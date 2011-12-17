@@ -76,42 +76,64 @@ Closure * new_Closure( int _sc, T * _lambda ) {
 typedef boost::recursive_mutex RecMutex;
 typedef boost::lock_guard<RecMutex> ScopedLock;
 
+
+/* This class is a delegation lock.
+   What it does is to do something ( a closure here ), and
+   if the lock is not available, some other thread does the
+   work a bit later. */
+
+/* The requirements for this class are :
+    - To have mutual exclusion.
+    - To have immediate execution of the delegation.
+    (that is, delegation posted must be executed right after the code
+    holding the lock )
+    - Reentrancy : delegating in delegator should be equivalent
+    to executing synchronously.
+    WARNING : for now, only one delegator is supported at a time.
+    */
+
 class Delegator {
 
   std::list<Closure*> delegations;
   RecMutex recmutex;
-  int occupied;
-  int fastl;
+  int counter;
+
 
 public :
   static Delegator default_delegator;
 
-  Delegator() : occupied(0),fastl(0) {}
+  Delegator() : counter(0) {}
 
   void delegate( Closure *c ) {
+      static __thread int in_delegator = 0;
+
+      // Executes linearly if in delegator :
+      if ( in_delegator ) {
+          (*c)();
+          return;
+      }
+
+      // Otherwise add to the queue first.
       {
           ScopedLock scl(recmutex);
           delegations.push_back( c );
       }
 
 
-       while(! __sync_bool_compare_and_swap(&fastl,0,1) );
-
-        if ( occupied ==  0 ) {
-          occupied = 1;
-
-          __sync_synchronize();
-          fastl = 0;
-
+      // Then compete for a ticket
+      int ticket = __sync_fetch_and_add(&counter,1);
+      if ( ticket == 0 ) {
+          in_delegator ++;
           do {
-                //DEBUG( "In delegate...");
-                do_delegations();
-            } while(! __sync_bool_compare_and_swap(&fastl,0,1));
 
-           occupied = 0;
-           __sync_synchronize();
-	}
-        fastl = 0;
+              do_delegation();
+          } while ( __sync_sub_and_fetch(&counter,1) != 0 );
+          in_delegator --;
+      } else {
+          // Do nothing : we are guaranteed to be taken care of.
+      }
+
+
 
 	
   }
@@ -119,14 +141,14 @@ public :
 
 private:
 
-  void do_delegations() {
-        while ( true ) {
+  void do_delegation() {
+
 	  Closure * c = 0;
 	  {
                 ScopedLock scl( recmutex );
 
                 if ( delegations.empty() ) {
-                    break;
+                    FATAL("End of program.");
                 }
 		c = delegations.front();
 		delegations.pop_front();
@@ -141,7 +163,7 @@ private:
           //DEBUG( "[Out of delegator]");
           set_current_color(0);
           delegator_flag -= 1;
-	}
+
   }
   
 
