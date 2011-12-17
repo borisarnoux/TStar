@@ -129,10 +129,7 @@ int tstar_main_test6(int argc, char ** argv, struct frame_struct* first_task) {
 
 
 int main( int argc, char ** argv ) {
-
            tstar_main_test6(argc, argv, NULL );
-
-
 
 }
 

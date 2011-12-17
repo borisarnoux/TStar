@@ -20,16 +20,27 @@
 std::set<void*> valid_pages_set;
 
 void mapper_valid_address_add( void * ptr ) {
+#pragma omp critical (valcheck)
+    {
     valid_pages_set.insert(ptr);
+    }
 }
 void mapper_valid_address_check( void * ptr ) {
+#pragma omp critical (valcheck)
+    {
     if ( valid_pages_set.find(ptr) == valid_pages_set.end() ) {
         FATAL( "Pointer %p was not in valid set.", ptr);
     }
+    }
 }
 void mapper_valid_address_rm( void * ptr)  {
+
     mapper_valid_address_check(ptr);
+#pragma omp critical (valcheck)
+    {
     valid_pages_set.erase(ptr);
+}
+
 }
 
 __attribute__((destructor))
@@ -102,7 +113,7 @@ int mapper_who_owns( void * ptr ) {
     int retval = val/zone_len;
 
     CFATAL( retval >= nnodes, "Invalid pointer"  );
-    DEBUG( "%d owns %p", retval, ptr);
+    //DEBUG( "%d owns %p", retval, ptr);
     return retval;
 
 }
@@ -110,9 +121,9 @@ int mapper_who_owns( void * ptr ) {
 
 void * mapper_malloc(size_t len) {
     void * retval = NULL;
-    CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
 #pragma omp critical (owm_heap)
 {
+    CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
 
     retval = local_heap->allocate( len );
 }
@@ -123,11 +134,11 @@ void * mapper_malloc(size_t len) {
 
 void mapper_free( void * zone ) {
     CFATAL( mapper_who_owns(zone) != get_node_num(), "Cannot free pointer out of zone( %p )", zone );
-    CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
 
 #pragma omp critical (owm_heap)
 {
-    local_heap->deallocate( zone );
+        CFATAL( !local_heap->check_sanity(), "Corrupted heap.");
+        local_heap->deallocate( zone );
 }
 }
 
