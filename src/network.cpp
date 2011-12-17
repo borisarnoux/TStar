@@ -478,8 +478,6 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
         owm_frame_layout * fheader = GET_FHEADER( ai.page );
         DEBUG( "Receiving AskInvalidate(on %p), orig=%d ", ai.page, ai.orig );
         if ( !IS_RESP( fheader )  ) {
-          // TODO : remove this line (aggressive testing)
-
           CFATAL(ai.orig == get_node_num(), "Forwarding loop.");
           forward( m, PAGE_GET_NEXT_RESP(ai.page) );
           return;

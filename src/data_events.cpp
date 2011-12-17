@@ -99,7 +99,9 @@ void request_page_resp( PageType page ) {
     );
     register_for_write_arrival(page, incrementor);
 
-    // TODO : make a page only requested once.
+    // How can we make a page only requested once ?
+    // It is difficult because a page need not be valid to be used...
+    // TODO : discuss, gaunge or address this weakness
     NetworkInterface::send_resp_req( mapper_who_owns(page),page);
 
 }
