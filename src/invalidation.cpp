@@ -232,11 +232,11 @@ void invalidate_and_do ( void * page, Closure * c ) {
 
   Closure * continuer = NULL;
   if ( c!= NULL ) {
-  continuer = new_Closure( total_to_wait,
+    continuer = new_Closure( total_to_wait,
             CFATAL( c == NULL, "NULL Closure invalid here." );
             (*c).tdec();
 
-  );
+    );
   }
 
   for ( auto i = range.first; i != range.second; ++i ) {
@@ -251,7 +251,7 @@ void invalidate_and_do ( void * page, Closure * c ) {
 
     NetworkInterface::send_do_invalidate( target, page, s);
   }
-  resp_shared_map.erase(range.first,range.second);
+  resp_shared_map.erase(range.first, range.second);
 
 }
 
