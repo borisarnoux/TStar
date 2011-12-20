@@ -272,6 +272,8 @@ void ask_or_do_tdec( void * page ) {
         DEBUG( "TDec comes to : %d", sfres);
         if ( sfres == 0 ) {
             Scheduler::global_scheduler->schedule_global(fp);
+        } else if ( sfres < 0 ) {
+            FATAL( "Negative TDec.");
         }
     } else {
         // Send a message for TDec :

@@ -53,6 +53,10 @@ void ExecutionUnit::register_write( void * object, void * frame, size_t offset, 
     writes_by_ressource.insert( DWriteMap::value_type(k,w));
 }
 
+
+// This function implements most of the "Publish",
+// post-execution phase of a task.
+
 void ExecutionUnit::process_commits() {
     // For each registered ressource
 
@@ -65,8 +69,10 @@ void ExecutionUnit::process_commits() {
         if (  current_type == DATA_TYPE || current_type == R_FRAME_TYPE ) {
             continue;
         }
-
         void * current_value = current_cfp->args[i];
+
+
+
         DEBUG( "Processing ressource %p of type %x ", current_value, (unsigned int)current_type );
 
         // Same thing for all writes ( by object or by frame )
@@ -201,8 +207,29 @@ bool ExecutionUnit::check_ressources() {
 
 
 void ExecutionUnit::before_code() {
-    // Check ressources availability.
+    // Make some safety checks
+    for ( int i = 0; i < current_cfp->static_data->nargs; ++i ) {
+        auto type = current_cfp->static_data->arg_types[i];
+        if ( type != R_FRAME_TYPE
+             && type != W_FRAME_TYPE
+             && type != RW_FRAME_TYPE
+             && type != DATA_TYPE ) {
+            FATAL( "Unknown type %ld for data at position %d in %p.",
+                    type, i, current_cfp);
 
+        }
+
+        if ( type != DATA_TYPE ) {
+            // Check pointer position :
+
+            int pos = mapper_who_owns(current_cfp->args[i]);
+            if ( pos < 0 || pos >= get_num_nodes() ) {
+                FATAL( "Invalid pointer %p in argument %d of frame %p (type=%ld)",
+                       current_cfp->args[i], i, current_cfp, type);
+            }
+
+        }
+    }
 }
 
 void ExecutionUnit::after_code() {

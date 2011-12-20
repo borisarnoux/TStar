@@ -34,18 +34,25 @@ typedef THANDLE( _input( vdef(ToPrint),int),
 // Takes care of creating initial value and binding to print.
 typedef THANDLE( _input(), _output()) fibclient_task;
 
-adder_task * adder() {
-    return TASK(3, adder_task,
+adder_task * adder(fibentry_task *a, fibentry_task *b) {
+    adder_task * addert = TASK(3, adder_task,
                 _code(
                     DEBUG( "In Adder(%d,%d) -> %d", get_arg(A,int), get_arg(B,int),
                            get_arg(A,int)+get_arg(B,int));
                     provide( AddOut, int, get_arg(A,int) + get_arg(B,int));
                     )
                 );
+    bind(a, FibOut, addert, A, int);
+    bind(b, FibOut, addert, B, int);
+
+    tstar_tdec(addert, NULL);
+
+    return addert;
+
 }
 
 fibentry_task * fibentry( int n ) {
-    return TASK(1, fibentry_task,
+    fibentry_task * fet =  TASK(1, fibentry_task,
                 _code(
                     CFATAL( n < 0, "Invalid use of fibentry, n >= 0 required (%d found )", n);
                     DEBUG( "FIBENTRY %d", n);
@@ -54,28 +61,14 @@ fibentry_task * fibentry( int n ) {
                         return;
                     }
                     // or spawn fib1 and fib2
+                    adder_task * ad = adder(fibentry(n-1),fibentry(n-2));
 
-                    fibentry_task * fe1 = fibentry(n-1);
-                    fibentry_task * fe2 = fibentry(n-2);
-
-                    adder_task * ad = adder();
-
-                    bind(fe1, FibOut, ad, A, int);
-                    bind(fe2, FibOut, ad, B, int);
-#ifdef DEBUG_ADDITIONAL_CODE
-                      mapper_valid_address_check(fe1->get_framep(vname(FibOut)) );
-#endif
-#ifdef DEBUG_ADDITIONAL_CODE
-                      mapper_valid_address_check(fe2->get_framep(vname(FibOut)) );
-#endif
                     bind_outout( ad, AddOut, FibOut);
-
-                    tstar_tdec(fe2, NULL);
-                    tstar_tdec(fe1, NULL);
-                    tstar_tdec(ad, NULL);
 
 
                     ) );
+        tstar_tdec(fet, NULL);
+        return fet;
 }
 
 printer_task * printer() {
@@ -99,7 +92,6 @@ fibclient_task * fibclient(int n) {
 #ifdef DEBUG_ADDITIONAL_CODE
                       mapper_valid_address_check(fib0->get_framep(vname(FibOut)) );
 #endif
-                      tstar_tdec(fib0,NULL);
                      )
                  );
 

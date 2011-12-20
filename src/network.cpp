@@ -553,6 +553,8 @@ void NetworkInterface::onTDec( MessageHdr &m ) {
         DEBUG( "TDec comes to : %d", sfres);
         if ( sfres == 0 ) {
             Scheduler::global_scheduler->schedule_global(fp);
+        } else if ( sfres < 0 ) {
+            FATAL( "Negative TDec.");
         }
 
 }

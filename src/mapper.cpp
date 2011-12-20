@@ -114,7 +114,6 @@ int mapper_who_owns( void * ptr ) {
 
     int retval = val/zone_len;
 
-    CFATAL( retval >= nnodes, "Invalid pointer"  );
     //DEBUG( "%d owns %p", retval, ptr);
     return retval;
 
