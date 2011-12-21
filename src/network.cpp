@@ -330,6 +330,9 @@ void NetworkInterface::onRWriteAck( MessageHdr &m ) {
 
         // We additionaly note that the sender is the resp for this page.
         struct owm_frame_layout * fheader = GET_FHEADER(rwa.page);
+
+        // Only RESP sends RWriteAck messages
+        // We take note here.
         fheader->next_resp = m.from;
 
         signal_write_commited( rwa.serial, rwa.page );
@@ -501,6 +504,9 @@ void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         CFATAL( IS_RESP( fheader), "Cannot invalidate RESP" );
         CFATAL( IS_INVALID(fheader), "Cannot invalidate Invalid : double invalidation.");
         INVALIDATE( fheader );
+        // Only a RESP send a DoInvalidate message.
+        // We take note :)
+        fheader->next_resp = m.from;
 
 
         // Respond do invalidate.

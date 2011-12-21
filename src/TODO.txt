@@ -14,3 +14,7 @@
 * Maybe RESP must not be transferred when an invalidation is in process
   ( because of the closures :p)
 * FIXME : in rare cases, serial generation could overlap between threads
+* TODO : simpler local task : carrying a pointer to a context ( ExecutionUnit)
+         ExecutionUnit garbage collection.
+
+ * TODO : more explicit scheduler control ? ( Ex : Glob_Subtask ( blabla ), Loc_Subtask( blabla ) ).
