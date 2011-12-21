@@ -1,4 +1,3 @@
-#include "main.h"
 
 #include <mapper.h>
 #include <network.hpp>

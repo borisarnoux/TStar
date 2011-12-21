@@ -1,26 +1,6 @@
-/**
- * This source file is used to print out a stack-trace when your program
- * segfaults. It is relatively reliable and spot-on accurate.
- *
- * This code is in the public domain. Use it as you see fit, some credit
- * would be appreciated, but is not a prerequisite for usage. Feedback
- * on it's use would encourage further development and maintenance.
- *
- * Due to a bug in gcc-4.x.x you currently have to compile as C++ if you want
- * demangling to work.
- *
- * Please note that it's been ported into my ULS library, thus the check for
- * HAS_ULSLIB and the use of the sigsegv_outp macro based on that define.
- *
- * Author: Jaco Kroon <jaco@kroon.co.za>
- *
- * Copyright (C) 2005 - 2010 Jaco Kroon
- * 
- *
- */
 
- /* Modified by Boris Arnoux, for integration with ngpsvcanal. All credits to 
-   Jaco Kroon. Unquestionably. */
+
+
 
 
 #ifndef _GNU_SOURCE
