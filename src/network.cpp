@@ -98,6 +98,7 @@ struct FreeMessage {
     void * page;
 };
 
+
 void NetworkLowLevel::init( int* argc, char *** argv ) {
       MPI_Init(argc, argv );
       MPI_Comm_rank(MPI_COMM_WORLD, &node_num );
@@ -172,6 +173,7 @@ global_network_interface = this;
       BIND_MT( StealMessage);
       BIND_MT( StolenMessage);
       BIND_MT( FreeMessage );
+      BIND_MT( RPCMessage );
       /* For debugging purposes */
       BIND_MT( TransPtr );
 
@@ -258,7 +260,8 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         DEBUG( " NETWORK -- DataReqMessage Received : page %p from %d (sizeofpage=%d)", drm.page, drm.orig, (int)fheader->size );
 
         // Build an answer.
-        DataMessage & resp = *((DataMessage*) new char[sizeof(DataMessage) +fheader->size] );
+        char _tab[sizeof(DataMessage) +fheader->size];
+        DataMessage & resp = *((DataMessage*) &_tab);
         resp.size = fheader->size;
         resp.page = drm.page;
 
@@ -275,8 +278,6 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
 
 
         send( resphdr );
-        // TODO : replace with smart pointer...
-        delete[] (char*)&resp;
         // Then add the recipient to the shared list of nodes :
         // see invalidation.cpp
         register_copy_distribution( drm.page, drm.orig );
@@ -420,7 +421,8 @@ void  NetworkInterface::doRespTransfer(PageType page,  node_id_t target ) {
 
         // Transfers the responsibility :
         fheader->next_resp = target;
-        RespTransfer & resp_transfer = *( RespTransfer * ) new char[sizeof(RespTransfer)+fheader->size];
+        char _tab[sizeof(RespTransfer)+fheader->size];
+        RespTransfer & resp_transfer = *( RespTransfer * ) &_tab;
         resp_transfer.datamsg.size = fheader->size;
         resp_transfer.shared_nodes_bitmap = export_and_clear_shared_set(page);
         // Because we consider ourselves as valid, bitmap contains local node :
@@ -440,7 +442,6 @@ void  NetworkInterface::doRespTransfer(PageType page,  node_id_t target ) {
 
         send( resp_msg );    
 
-        delete[] (char*)&resp_transfer;
 }
 
 void NetworkInterface::onRespTransfer( MessageHdr &m ) {
@@ -614,6 +615,21 @@ void NetworkInterface::onFreeMessage(MessageHdr &m) {
 
 }
 
+void NetworkInterface::onRPCMessage(MessageHdr &m) {
+    RPCMessage &rmesg = *(RPCMessage*)m.data;
+
+    if ( rmesg.on_resp && !PAGE_IS_RESP(rmesg.page)) {
+        // Forwarding in case of explicit "On resp" request.
+        forward(m, PAGE_GET_NEXT_RESP(rmesg.page));
+        return;
+    }
+
+    Closure * z = (Closure*) rmesg.data;
+
+    (*z)();
+
+}
+
 
 /*------------ Functions for sending messages---------------------- */
 void NetworkInterface::send_invalidate_ack( node_id_t target, PageType page, serial_t serial ) {
@@ -728,7 +744,8 @@ void NetworkInterface::send_rwrite( node_id_t target,
                                     size_t offset,
                                     void * buffer,
                                     size_t len) {
-    RWrite &rw = *(RWrite*)new char[sizeof(RWrite)+ len];
+    char _tab[sizeof(RWrite)+ len];
+    RWrite &rw = *(RWrite*) &_tab;
     memcpy( rw.data, (char*)buffer, len );
     rw.offset = offset;
     rw.orig = get_node_num();
@@ -744,7 +761,6 @@ void NetworkInterface::send_rwrite( node_id_t target,
     m.type = RWriteType;
 
     send(m);
-    delete[] (char*)&rw;
 }
 
 void NetworkInterface::bcast_exit( int code ) {
@@ -818,7 +834,8 @@ void NetworkInterface::send_stolen_message( int target ,  int amount, struct fra
     DEBUG( "NetworkInterface : Sending Stolen message for %d : %d tasks packed. ", target, amount );
 
     // Allocate a message :
-    StolenMessage * sm = (StolenMessage*) new char[sizeof(StolenMessage) + amount * sizeof(frame_struct*)];
+    char _tab[sizeof(StolenMessage) + amount * sizeof(frame_struct*)];
+    StolenMessage * sm = (StolenMessage*) &_tab;
     sm->amount = amount;
     memcpy( sm->stolen, buffer, amount * sizeof(frame_struct*));
 
@@ -830,7 +847,6 @@ void NetworkInterface::send_stolen_message( int target ,  int amount, struct fra
     m.type = StolenMessageType;
 
     send( m );
-    delete[] (char*)sm;
 }
 
 void NetworkInterface::send_free_message(node_id_t target, PageType page) {
@@ -846,6 +862,7 @@ void NetworkInterface::send_free_message(node_id_t target, PageType page) {
 
     send(m);
 }
+
 
 // Wait for reply.
 void NetworkInterface::wait_for_stolen_task() {

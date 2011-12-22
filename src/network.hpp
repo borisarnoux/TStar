@@ -4,6 +4,7 @@
 #include "mpi.h"
 #include <node.h>
 #include <identifiers.h>
+#include <delegator.hpp>
 
 // Routable messages have orig and are forwarded.
 enum MessageTypes {
@@ -28,6 +29,7 @@ enum MessageTypes {
   ExitMessageType,
   StealMessageType,
   StolenMessageType,
+  RPCMessageType,
  /* For debug */
   TransPtrType,
   FreeMessageType,
@@ -45,9 +47,25 @@ struct MessageHdr {
 };
 
 
+struct RPCMessage {
+    int orig;
+    // Option : execute onto a resp of a page given below
+    bool on_resp;
+    void * page;
+    char data[];
+} __packed;
 
 
+template<typename L>
+struct RPCClosure : public Closure {
+    RPCClosure( L _l ) : Closure(1),lf(_l) {}
 
+    L lf;
+
+    void operator() () {
+        lf();
+    }
+};
 
 
 class NetworkLowLevel {
@@ -127,6 +145,7 @@ class NetworkInterface : public NetworkLowLevel {
     static void onStealMessage( MessageHdr &m );
     static void onStolenMessage( MessageHdr &m );
     static void onFreeMessage(MessageHdr &m);
+    static void onRPCMessage(MessageHdr &m);
       /*------------ Functions for sending messages---------------------- */
     static void send_invalidate_ack( node_id_t target, PageType page, serial_t serial );
 
@@ -152,6 +171,27 @@ class NetworkInterface : public NetworkLowLevel {
     static void send_stolen_message( node_id_t target, int amont, struct frame_struct ** buffer );
     static void send_free_message( node_id_t target, PageType page );
 
+    template<typename L>
+    static void send_rpc_message( node_id_t target, bool to_resp, void * page, const L &l ) {
+        RPCClosure<L> rclosure(l);
+
+        char buffer[sizeof(RPCClosure<L>)+sizeof(RPCMessage)];
+        RPCMessage * rmesg = (RPCMessage*) &buffer;
+        memcpy( rmesg->data, &rclosure, sizeof(rclosure) );
+        rmesg->on_resp = to_resp;
+        rmesg->orig = get_node_num();
+        rmesg->page = page;
+
+        MessageHdr m;
+        m.data = &buffer;
+        m.data_size = sizeof(RPCClosure<L>) + sizeof(RPCMessage);
+        m.type = RPCMessageType;
+        m.to = target;
+        m.from = get_node_num();
+
+        send(m);
+    }
+
     static void bcast_exit( int code );
 
     static void dbg_send_ptr( node_id_t target, void * ptr );
@@ -159,5 +199,39 @@ class NetworkInterface : public NetworkLowLevel {
     static void onTransPtr(MessageHdr &msg);
     void wait_for_stolen_task();
 };
+
+// Some useful macros :
+
+#define RPC_ON_RESP( page, code ) \
+    do {\
+        if ( PAGE_IS_RESP(page) ) { \
+            ([=]()  {\
+                code \
+                }\
+                )();\
+        } else {\
+                NetworkInterface::global_network_interface->send_rpc_message(\
+                    PAGE_GET_NEXT_RESP(page),\
+                    true,\
+                    page,\
+                    [=]{ code });\
+        }\
+     } while (0)
+#define RPC_ON( id, code ) \
+    do {\
+if ( id == get_node_num() ) {\
+    ([=] {\
+        code\
+    })();\
+} else {\
+NetworkInterface::global_network_interface->send_rpc_message(\
+    id,\
+    false,\
+    NULL,\
+    [=]{ code });\
+}\
+} while (0)
+
+
 
 #endif

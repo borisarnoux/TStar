@@ -59,6 +59,7 @@ fibentry_task * fibentry( int n ) {
                         provide( FibOut, int, n);
                         return;
                     }
+
                     // or spawn fib1 and fib2
                     adder_task * ad = adder(fibentry(n-1),fibentry(n-2));
 
@@ -74,9 +75,13 @@ printer_task * printer() {
     return TASK(1, printer_task,
                 _code (
                     DEBUG( "Result : %d", get_arg(ToPrint,int));
+
+                    int nid = get_node_num();
+
                     NetworkInterface::bcast_exit(0);
 
-                    ) );
+                    )
+            );
 }
 
 

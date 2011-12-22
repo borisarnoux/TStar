@@ -19,3 +19,4 @@
 
  * TODO : more explicit scheduler control ? ( Ex : Glob_Subtask ( blabla ), Loc_Subtask( blabla ) ).
  * TODO : add more expression support in the interface.
+ * TODO : whenever a page is checked for resp, check whether this state can be relied on to last or not.
