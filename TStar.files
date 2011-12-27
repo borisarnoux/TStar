@@ -12,7 +12,6 @@ src/hash_int.h
 src/identifiers.h
 src/invalidation.cpp
 src/invalidation.hpp
-src/log.h
 src/mappable_event.hpp
 src/mapper.cpp
 src/mapper.h
@@ -32,3 +31,5 @@ src/main.cpp
 src/tstariface.h
 src/tstariface.cpp
 src/sigsegv.cpp
+src/mpsc.h
+src/typetuple.hpp
