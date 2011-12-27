@@ -7,7 +7,7 @@
 
 #include <misc.h>
 #include <frame.hpp>
-// This is a C++ header.
+#include <mpsc.h>
 
 #include  <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/locks.hpp>
@@ -73,8 +73,6 @@ Closure * new_Closure( int _sc, T * _lambda ) {
 #define DELEGATE_R( delegator, block ) (delegator).delegate( new_Closure_R( 1, block ) )
 
 
-typedef boost::recursive_mutex RecMutex;
-typedef boost::lock_guard<RecMutex> ScopedLock;
 
 
 /* This class is a delegation lock.
@@ -94,8 +92,7 @@ typedef boost::lock_guard<RecMutex> ScopedLock;
 
 class Delegator {
 
-  std::list<Closure*> delegations;
-  RecMutex recmutex;
+  MPSC<Closure*> delegations;
   int counter;
 
 
@@ -105,6 +102,7 @@ public :
   Delegator() : counter(0) {}
 
   void delegate( Closure *c ) {
+      CFATAL( c == NULL, "Cannot delegate null closure.");
       static __thread int in_delegator = 0;
 
       // Executes linearly if in delegator :
@@ -114,10 +112,8 @@ public :
       }
 
       // Otherwise add to the queue first.
-      {
-          ScopedLock scl(recmutex);
-          delegations.push_back( c );
-      }
+      delegations.push( c );
+
 
 
       // Then compete for a ticket
@@ -144,15 +140,11 @@ private:
   void do_delegation() {
 
 	  Closure * c = 0;
-	  {
-                ScopedLock scl( recmutex );
 
-                if ( delegations.empty() ) {
-                    FATAL("End of program.");
-                }
-		c = delegations.front();
-		delegations.pop_front();
-	  }
+          while ( c == 0 )
+              c = delegations.pop();
+          CFATAL( c == NULL, "Invalid count..");
+
 
 	  // Execute the delegation.
           //CFATAL(delegator_flag == 1, "Nested delegators" );

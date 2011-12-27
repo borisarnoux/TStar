@@ -300,9 +300,9 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
         // Case of a resp node :
         // Integrate the write :
         CHECK_CANARIES(rwm.page);
-        mapper_check_sanity();
+        //mapper_check_sanity();
         memcpy( (char*)rwm.page + rwm.offset, rwm.data, rwm.size );
-        mapper_check_sanity();
+        //mapper_check_sanity();
         CHECK_CANARIES(rwm.page);
 
         // Then send ack :

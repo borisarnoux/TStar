@@ -16,6 +16,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define MUTE
+
 extern __thread int current_color;
 void set_current_color( int color );
 #define exit_group(a) syscall(SYS_exit_group, a)
