@@ -3,7 +3,7 @@
 #define NODE_H
 #include <omp.h>
 
-
+#include <stdlib.h>
 
 #include <misc.h>
 
@@ -47,12 +47,25 @@ static inline int get_num_nodes() {
 
 
 inline int get_thread_num() {
+
     return omp_get_thread_num();
 
 }
 
+
+static int _threads_tmp = -1;
 inline int get_num_threads() {
-    return omp_get_num_threads();
+
+    // TODO : work on this...
+    // Because this function is used outside omp parallel blocks,
+    // we need to give the right result... ( 2 here ).
+    if ( _threads_tmp == -1  ) {
+        char * fromomp = getenv("OMP_NUM_THREADS");
+
+        _threads_tmp = fromomp==NULL?2:atoi(fromomp);
+        CFATAL( _threads_tmp != 2, " Probably something wrong with OMP NUM THREADS ( != 2 here )");
+    }
+    return _threads_tmp;
 }
 
 #ifdef __cplusplus

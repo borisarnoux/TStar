@@ -8,16 +8,16 @@
 extern "C" {
 #endif
 
-#ifdef DEBUG_ADDITIONAL_CODE
+#if DEBUG_ADDITIONAL_CODE
 void mapper_valid_address_rm( void * ptr);
 void mapper_valid_address_check( void * ptr );
 void mapper_valid_address_add( void * ptr );
 
 #endif
 
-extern void mapper_initialize_address_space ( void * base, size_t len_pernode, int _nnodes ) ;
+extern void mapper_initialize_address_space ( void * base, size_t len_pernode, int _nnodes, int nthreads) ;
 
-extern int mapper_who_owns( void * ptr );
+extern int mapper_node_who_owns( void * ptr );
 
 // Allocates in node local segment.
 extern void * mapper_malloc(size_t len);

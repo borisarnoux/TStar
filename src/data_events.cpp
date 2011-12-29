@@ -102,7 +102,7 @@ void request_page_resp( PageType page ) {
     // How can we make a page only requested once ?
     // It is difficult because a page need not be valid to be used...
     // TODO : discuss, gaunge or address this weakness
-    NetworkInterface::send_resp_req( mapper_who_owns(page),page);
+    NetworkInterface::send_resp_req( mapper_node_who_owns(page),page);
 
 }
 
@@ -131,7 +131,9 @@ void acquire_rec( fat_pointer_p ptr, Closure * t ) {
   }
   DEBUG( "Ptr available : no rescheduling !");
 
+#if DEBUG_ADDITIONAL_CODE
   CHECK_CANARIES(ptr);
+#endif
 
   int todo_count = 0;
   // Examination of the contents : counting.

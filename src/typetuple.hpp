@@ -349,7 +349,7 @@ struct task_data_nocontext {
                 static_data_p = &layout;
                 CFATAL( sizeof(T1) != 1 && T1::layout::length * sizeof(intptr_t) != sizeof(T1), "Assumption failed." );
                 //fprintf( stderr, "Setting layout.\n");
-#ifdef DEBUG_ADDITIONAL_CODE
+#if DEBUG_ADDITIONAL_CODE
 
                 for ( int i = 0; i < 10; ++i ) {
                     canaribuf[i] = 0xdeadbee0 + i;
@@ -360,7 +360,7 @@ struct task_data_nocontext {
     }
 
 
-#ifdef DEBUG_ADDITIONAL_CODE
+#if DEBUG_ADDITIONAL_CODE
     uint32_t canaribuf[10];
 #endif
     struct static_task_data<T1,T2,Uniker> * static_data_p;
@@ -445,14 +445,17 @@ struct task_data : public T1 {
         struct task_data<T1,L> * t = (struct task_data<T1,L> *) tstar_getcfp();
         t->lambda();
 
-        // TODO : Remove it.
+#if DEBUG_ADDITIONAL_CODE
         for ( int i = 0; i < 10; ++i ) {
             CFATAL( t->canaribuf[i] != 0xdeadbee0 + i, "Canari %d check failed.", i );
         }
+#endif
     }
 
 
-
+    // Here we store the additional variables,
+    // that are captured in the context of the
+    // task creation.
     L lambda;
 
 

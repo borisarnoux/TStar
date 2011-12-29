@@ -19,7 +19,8 @@
 
 int Scheduler::prep_task_count = 0;
 int Scheduler::omp_task_count = 0;
-
+int Scheduler::busy_processing_messages;
+int Scheduler::processing_messages_lock;
 
 
 typedef std::multimap<PageType, PageType> TDecMap;
@@ -222,7 +223,7 @@ void ExecutionUnit::before_code() {
         if ( type != DATA_TYPE ) {
             // Check pointer position :
 
-            int pos = mapper_who_owns(current_cfp->args[i]);
+            int pos = mapper_node_who_owns(current_cfp->args[i]);
             if ( pos < 0 || pos >= get_num_nodes() ) {
                 FATAL( "Invalid pointer %p in argument %d of frame %p (type=%ld)",
                        current_cfp->args[i], i, current_cfp, type);
@@ -246,9 +247,16 @@ void ExecutionUnit::after_code() {
     owm_free(tstar_getcfp());
 
     // As a systematic step, we process messages.
-    NetworkInterface *nip = &local_execution_unit->ni;
-    DELEGATE( Delegator::default_delegator, nip->process_messages(); );
+    if ( !Scheduler::busy_processing_messages ) {
+        if ( __sync_bool_compare_and_swap( &Scheduler::processing_messages_lock,
+                                           0, 1) ) {
+            Scheduler::busy_processing_messages = 1;
+            ni.process_messages();
+            Scheduler::processing_messages_lock = 0;
+            Scheduler::busy_processing_messages = 0;
+        }
 
+    }
 
 
     // Then consider what might left to do :
@@ -299,13 +307,18 @@ void ExecutionUnit::after_code() {
     }
 
     // To process messages of tasks in prep :
-    while ( Scheduler::omp_task_count == 0 ) {
+    while (  Scheduler::omp_task_count == 0 ) {
 
-        bool waiter = false;
-        bool *wp = &waiter;
 
-        DELEGATE( Delegator::default_delegator, NetworkInterface::global_network_interface->process_messages(); *wp = true; );
-        while ( ! waiter);
+        while ( Scheduler::omp_task_count == 0 && Scheduler::busy_processing_messages );
+
+        if ( __sync_bool_compare_and_swap(&Scheduler::processing_messages_lock, 0, 1)) {
+             Scheduler::busy_processing_messages = 1;
+             ni.process_messages();
+
+             Scheduler::processing_messages_lock = 0;
+             Scheduler::busy_processing_messages = 0;
+        }
 
     }
 

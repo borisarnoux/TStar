@@ -13,24 +13,28 @@ static inline void * owm_malloc( size_t size ) {
         struct owm_frame_layout * retval =
                 (struct owm_frame_layout*) mapper_malloc( size +
                                                           sizeof(struct owm_frame_layout)
-                                          #ifdef DEBUG_ADDITIONAL_CODE
+                                          #if DEBUG_ADDITIONAL_CODE
                                                           + sizeof(int) // For the canari at the end.
                                           #endif
                                                           );
-#ifdef DEBUG_ADDITIONAL_CODE
+#if DEBUG_ADDITIONAL_CODE
         mapper_valid_address_add( retval->data );
 #endif
 	retval->size = size;
         retval->proto_status = RESP;
         retval->usecount = 1;
         retval->next_resp = 0;
+#if DEBUG_ADDITIONAL_CODE
         retval->canari = CANARI;
         retval->canari2 = CANARI;
+#endif
         retval->reserved = false;
         retval->freed = 0;
 
         CFATAL( (intptr_t) retval->data - (intptr_t) retval != sizeof(struct owm_frame_layout), "Layout invalid (packing issue).");
+#if DEBUG_ADDITIONAL_CODE
         CHECK_CANARIES( retval->data );
+#endif
         DEBUG("Allocated : page %p", retval->data);
 
 #if DEBUG_ADDITIONAL_CODE
@@ -42,9 +46,10 @@ static inline void * owm_malloc( size_t size ) {
 
 static inline void owm_free_local( void * page ) {
         // Error if not called locally.
-        CFATAL( mapper_who_owns(page) != get_node_num(), "Attempting to free pointer in a different location." );
-        CHECK_CANARIES(page);
+        CFATAL( mapper_node_who_owns(page) != get_node_num(), "Attempting to free pointer in a different location." );
 #if DEBUG_ADDITIONAL_CODE
+
+        CHECK_CANARIES(page);
         int * ending_canari = (int*)((intptr_t)page + (intptr_t)(GET_FHEADER(page))->size);
         CFATAL( *ending_canari != CANARI, "Modified ending canari !!");
 #endif
@@ -56,7 +61,7 @@ static inline void owm_free_local( void * page ) {
 
         auto dofree_closure = new_Closure( 1,
         mapper_free( GET_FHEADER(page) );
-        #ifdef DEBUG_ADDITIONAL_CODE
+        #if DEBUG_ADDITIONAL_CODE
                               mapper_valid_address_rm( page );
         #endif
          );
@@ -68,13 +73,13 @@ static inline void owm_free_local( void * page ) {
 }
 
 static inline void owm_free( void * page ) {
-    if (mapper_who_owns(page) == get_node_num() ) {
+    if (mapper_node_who_owns(page) == get_node_num() ) {
         // Free locally.
         DEBUG( "Freeing : %p, local pointer, done locally.",page);
         owm_free_local(page);
     } else {
         DEBUG( "Freeing : %p, global pointer, sending message to %d.",page, PAGE_GET_NEXT_RESP(page));
-        NetworkInterface::send_free_message(mapper_who_owns(page), page);
+        NetworkInterface::send_free_message(mapper_node_who_owns(page), page);
     }
 
 }

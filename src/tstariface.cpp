@@ -37,7 +37,8 @@ void tstar_setup(int argc, char ** argv) {
 
 
     // Setup address space.
-    mapper_initialize_address_space((void*)ZONE_START, 0x40000, get_num_nodes());
+    DEBUG( "Inititalizing address space with %d nodes and %d threads per node", get_num_nodes(), get_num_threads() );
+    mapper_initialize_address_space((void*)ZONE_START, 0x40000, get_num_nodes(), get_num_threads());
 
     // Creates a scheduler :
     sched = new Scheduler(ni);
@@ -106,16 +107,17 @@ int tstar_main( struct frame_struct* first_task) {
             } // END omp single
 } // END omp parallel
     } else {
-       // Create a dummy task :
-        dummy_task * dt = TASK( 1, dummy_task, _code(
-                                    DEBUG( "Program start on node %d", get_node_num());
-                                    ) );
+
 #pragma omp parallel
 {
          sched->tls_init();
 
 #pragma omp single
 {
+             // Create a dummy task :
+              dummy_task * dt = TASK( 1, dummy_task, _code(
+                                          DEBUG( "Program start on node %d", get_node_num());
+                                          ) );
              sched->schedule_global( (struct frame_struct*)dt);
 
 

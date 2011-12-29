@@ -76,7 +76,7 @@ Closure * new_Closure( int _sc, T * _lambda ) {
 
 
 /* This class is a delegation lock.
-   What it does is to do something ( a closure here ), and
+   What it does is to execute some code ( a closure here ), and
    if the lock is not available, some other thread does the
    work a bit later. */
 
@@ -121,7 +121,6 @@ public :
       if ( ticket == 0 ) {
           in_delegator ++;
           do {
-
               do_delegation();
           } while ( __sync_sub_and_fetch(&counter,1) != 0 );
           in_delegator --;
@@ -161,6 +160,7 @@ private:
 
 
 };
+
 
 
 

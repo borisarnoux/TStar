@@ -10,14 +10,16 @@
 #include <syscall.h>
 #include <unistd.h>
 #include <omp.h>
-#include <node.h>
 
 #include <futex.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MUTE
+
+// Some config ( comment if necessary )
+#define MUTE // Sets all debug messages off.
+//#define DEBUG_ADDITIONAL_CODE 1 // Additional checks ( slow )
 
 extern __thread int current_color;
 void set_current_color( int color );
@@ -27,7 +29,6 @@ void set_current_color( int color );
 #define CONCAT2(A,B) A##B
 #define CONCAT3(A,B,C) A##B##C
 
-#define DEBUG_ADDITIONAL_CODE 1
 
 #define __packed __attribute__((packed))
 #define hidden_attr __attribute__((visibility("hidden")))

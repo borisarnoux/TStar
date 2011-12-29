@@ -79,18 +79,21 @@ public:
 
 
 class Scheduler {
+    friend class ExecutionUnit;
     int global_local_threshold;
     static __thread bool initialized;
     NetworkInterface &ni;
-
-
-public :
     std::list<struct frame_struct *> external_tasks;
 
     static const int lower_bound_for_work = 10;
 
     static int prep_task_count;
     static int omp_task_count;
+
+public :
+    static int busy_processing_messages;
+    static int processing_messages_lock;
+
 
     static Scheduler * global_scheduler;
 
@@ -108,6 +111,14 @@ public :
         }
         initialized = true;
     }
+
+    // -- Towards less reliance on OMP...
+    void spawn_theads( int n );
+
+    void thread_mainloop();
+
+    void schedule_task();
+    // -- End Towards.
 
     // This is the entry point, should be attained when SC reaches 0.
     void schedule_global( struct frame_struct * page );

@@ -6,7 +6,8 @@
 
 #include <tstariface.h>
 #include <mapper.h>
-
+#include <node.h>
+#include <misc.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -52,49 +53,65 @@ extern "C" {
 
 
 // Canari related functions.
+#if DEBUG_ADDITIONAL_CODE
 #define CHECK_CANARIES( page ) \
     do { struct owm_frame_layout * fheader = GET_FHEADER(page);\
     CFATAL( fheader->canari != CANARI || fheader->canari2 != CANARI, "Wrong canaries for page %p (%x,%x)", page, fheader->canari, fheader->canari2 );\
 } while (0)
+#endif
 
-
+#if DEBUG_ADDITIONAL_CODE
 #define SET_CANARIES(fheader) do { fheader->canari=fheader->canari2=CANARI;}while(0)
 #define CANARI ((int)0xdeadbeef)
+#endif
 
 //
 #define PAGE_GET_NEXT_RESP(page) get_next_resp(GET_FHEADER(page))
 
 
 struct owm_frame_layout {
+#if DEBUG_ADDITIONAL_CODE
         int canari;
+#endif
 	size_t size; // Size of
         int usecount;
-	int proto_status; // Fresh, Invalid, TransientWriter, Responsible.
+        int proto_status; // Valid, Invalid, TransientWriter, Responsible.
 	node_id_t next_resp;
         int reserved;
         int freed;
+#if DEBUG_ADDITIONAL_CODE
         int canari2;
+#endif
 
 	char data[]; 
 } __attribute__((__packed__));
 
 static inline owm_frame_layout * __get_fheader( void * page ) {
-    if ( mapper_who_owns(page)==get_node_num()) {
+#if DEBUG_ADDITIONAL_CODE
+    if ( mapper_node_who_owns(page)==get_node_num()) {
         mapper_valid_address_check(page);
     }
+#endif
     return (struct owm_frame_layout*)((intptr_t)(page) - sizeof(struct owm_frame_layout));
 }
 
 
 
 static inline node_id_t get_next_resp(owm_frame_layout*fheader) {
-    // Change the code of this
-    // Make it more robust.
-    if ( fheader->size != 0 && fheader->canari == fheader->canari2 &&
-         fheader->canari == CANARI ) {
+    // TODO : Change the code of this (relying on canari values...)
+    // Make it more robust. (known to cause errors...)
+#if DEBUG_ADDITIONAL_CODE
+    if ( fheader->size != 0
+         && fheader->next_resp <= get_num_nodes()
+          &&fheader->next_resp >= 0
+         && fheader->canari == fheader->canari2 &&
+         fheader->canari == CANARI
+         ) {
         return fheader->next_resp;
     }
-    else return mapper_who_owns(fheader);
+#endif
+
+    return mapper_node_who_owns(fheader);
 }
 
 

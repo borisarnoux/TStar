@@ -74,7 +74,7 @@ fibentry_task * fibentry( int n ) {
 printer_task * printer() {
     return TASK(1, printer_task,
                 _code (
-                    DEBUG( "Result : %d", get_arg(ToPrint,int));
+                    fprintf( stderr, "Result : %d\n", get_arg(ToPrint,int));
 
                     int nid = get_node_num();
 
@@ -93,7 +93,7 @@ fibclient_task * fibclient(int n) {
                       printer_task * p0 = printer();
 
                       bind(fib0, FibOut, p0, ToPrint, int );
-#ifdef DEBUG_ADDITIONAL_CODE
+#if DEBUG_ADDITIONAL_CODE
                       mapper_valid_address_check(fib0->get_framep(vname(FibOut)) );
 #endif
                      )
@@ -119,7 +119,7 @@ int tstar_main_test6(int argc, char ** argv, struct frame_struct* first_task) {
 
 
 
-    DEBUG( "Shouldn't display..");
+    DEBUG( "Shouldn't display...");
     return 0;
 }
 

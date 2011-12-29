@@ -11,8 +11,7 @@ extern "C" {
 
 
 struct frame_struct {
-#ifdef DEBUG_ADDITIONAL_CODE
-  // TODO : remove it.
+#if DEBUG_ADDITIONAL_CODE
   uint32_t canaribuf[10];
 #endif
   struct static_data * static_data;

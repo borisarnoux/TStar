@@ -129,6 +129,7 @@ bool NetworkLowLevel::receive( MessageHdr &m ) const {
       // Get size :
       int tmp_count = 0;
       MPI_Get_count( &s, MPI_CHAR, &tmp_count );
+      CFATAL( tmp_count == 0, "Empty message.");
       m.data_size = tmp_count;
       CFATAL(tmp_count<=0, "Negative or null message size");
       m.data = new char[m.data_size];
@@ -192,8 +193,11 @@ void NetworkInterface::process_messages() const {
           return;
         }
 
-        message_type_table[ m.type ] ( m );
-        delete[] (char *)m.data; //Frees the message after processing.
+        DELEGATE( Delegator::default_delegator,
+                  MessageHdr mm = m;
+                  message_type_table[ mm.type ] ( mm );
+                  delete[] (char *)mm.data; //Frees the message after processing.
+        );
       } 
 } 
 
@@ -229,8 +233,10 @@ void NetworkInterface::onDataMessage( MessageHdr &m ) {
        memcpy( drm.page, drm.data, drm.size );
        // Make it valid :
        VALIDATE( fheader );
+#if DEBUG_ADDITIONAL_CODE
        fheader->canari = CANARI;
        fheader->canari2 = CANARI;
+#endif
        fheader->next_resp = m.from;
 
        // Signal data arrived :
@@ -244,10 +250,12 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
 
         owm_frame_layout *fheader = GET_FHEADER( drm.page );
 
-        if ( mapper_who_owns(drm.page) == get_node_num() ) {
+        if ( mapper_node_who_owns(drm.page) == get_node_num() ) {
             // Owner must have correct canari values :
+#if DEBUG_ADDITIONAL_CODE
             CFATAL( fheader->canari != CANARI || fheader->canari2 != CANARI,
                     "Invalid canari values for page %p.",drm.page);
+#endif
 
         }
         if ( !IS_RESP( fheader )) {
@@ -299,11 +307,15 @@ void NetworkInterface::onRWrite( MessageHdr &m ) {
                (char *)rwm.page + rwm.offset+rwm.size, (int) rwm.size         );
         // Case of a resp node :
         // Integrate the write :
+#if DEBUG_ADDITIONAL_CODE
         CHECK_CANARIES(rwm.page);
+#endif
         //mapper_check_sanity();
         memcpy( (char*)rwm.page + rwm.offset, rwm.data, rwm.size );
         //mapper_check_sanity();
+#if DEBUG_ADDITIONAL_CODE
         CHECK_CANARIES(rwm.page);
+#endif
 
         // Then send ack :
         RWriteAck rwa;
@@ -351,8 +363,10 @@ void NetworkInterface::onRWReq( MessageHdr &m ) {
           forward( m, PAGE_GET_NEXT_RESP(rwrm.page) );
           return;
         }
+#if DEBUG_ADDITIONAL_CODE
         CHECK_CANARIES(rwrm.page);
-        if ( get_node_num() == mapper_who_owns(rwrm.page) && fheader->freed) {
+#endif
+        if ( get_node_num() == mapper_node_who_owns(rwrm.page) && fheader->freed) {
             FATAL( "Attempting to transfer resp of a freed zone.");
         }
         // If this page has no current writers :
@@ -417,7 +431,9 @@ void  NetworkInterface::doRespTransfer(PageType page,  node_id_t target ) {
         // Set state to valid.
         VALIDATE( fheader );
 
+#if DEBUG_ADDITIONAL_CODE
         CHECK_CANARIES(page);
+#endif
 
         // Transfers the responsibility :
         fheader->next_resp = target;
@@ -458,7 +474,9 @@ void NetworkInterface::onRespTransfer( MessageHdr &m ) {
 
         // Set resp :
         RESPONSIBILIZE( fheader );
+#if DEBUG_ADDITIONAL_CODE
         SET_CANARIES(fheader);
+#endif
         shared_set_load_bit_map(rt.page,rt.shared_nodes_bitmap);
         // Usecount is initialized to zero, it will grow with :
         //  - Immediate increases at "acquire" phases
@@ -486,10 +504,12 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
           forward( m, PAGE_GET_NEXT_RESP(ai.page) );
           return;
         } 
+#if DEBUG_ADDITIONAL_CODE
         CHECK_CANARIES(ai.page);
+#endif
 
-        if ( get_node_num() == mapper_who_owns(ai.page) && GET_FHEADER(ai.page)->freed ) {
-            FATAL( "Asking invalidation of freed page (passed canari test).");
+        if ( get_node_num() == mapper_node_who_owns(ai.page) && GET_FHEADER(ai.page)->freed ) {
+            FATAL( "Asking invalidation of freed page (passed canari test (if activated)).");
         }
         planify_invalidation( ai.page, ai.serial, ai.orig );
 
@@ -498,8 +518,9 @@ void NetworkInterface::onAskInvalidate( MessageHdr &m ){
 void NetworkInterface::onDoInvalidate( MessageHdr &m ) {
         DoInvalidate &di = *(DoInvalidate*) m.data;
         owm_frame_layout * fheader = GET_FHEADER( di.page );
-
+#if DEBUG_ADDITIONAL_CODE
         CHECK_CANARIES(di.page);
+#endif
 
         DEBUG( "Received DoInvalidate(%p)", di.page);
         CFATAL( IS_RESP( fheader), "Cannot invalidate RESP" );
@@ -587,7 +608,7 @@ void NetworkInterface::onStolenMessage( MessageHdr &m ) {
 
     int amount = sm.amount;
     for ( int i = 0; i < amount; ++ i ) {
-        DEBUG( "Importing Task.");
+        DEBUG( "Importing Task (%p)", sm.stolen[i]);
         Scheduler::global_scheduler->schedule_global(sm.stolen[i]);
     }
     stolen_message_onflight = 0;
@@ -604,7 +625,7 @@ void NetworkInterface::onFreeMessage(MessageHdr &m) {
 
 
     FreeMessage &fm = *(FreeMessage*)m.data;
-    if ( mapper_who_owns(fm.page) != get_node_num()) {
+    if ( mapper_node_who_owns(fm.page) != get_node_num()) {
         FATAL( "Free message not addressed to owner...");
     }
 
@@ -875,11 +896,17 @@ void NetworkInterface::wait_for_stolen_task() {
     // The node itself will still be responsive and process messages as usual.
 
     while (stolen_message_onflight) {
-        // Make sure we are not spamming the delegator : ( TODO : do a sync_delegate... )
-        bool waiter = false;
-        bool *wp = &waiter;
-        DELEGATE( Delegator::default_delegator, process_messages(); *wp=true ;);
-        while ( !waiter );
+        while ( stolen_message_onflight && Scheduler::busy_processing_messages );
+        if ( !stolen_message_onflight ) {
+            break;
+        }
+        if ( __sync_bool_compare_and_swap(&Scheduler::processing_messages_lock, 0, 1) ) {
+            Scheduler::busy_processing_messages = 1;
+            process_messages();
+            Scheduler::processing_messages_lock = 0;
+            Scheduler::busy_processing_messages = 0;
+
+        }
     }
 
 }
