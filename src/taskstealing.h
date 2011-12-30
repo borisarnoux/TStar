@@ -56,6 +56,9 @@ public:
         }
     }
 
+    int size() {
+        return bottom-top;
+    }
 
     item_t * expand() {
       int newsize = wsq->size*2;
@@ -184,14 +187,15 @@ class TaskScheduler {
         bool in_finished = false;
 
         while ( true ) {
-            if ( in_stealing &&
-                 std::count(stealing, stealing+nthreads, true) == nthreads ) {
-                // We are finished.
-                finished[get_thread_num()] = true;
-                in_finished = true;
-            } else {
-                finished[get_thread_num()] = false;
-                in_finished = false;
+            if ( in_stealing) {
+                if ( std::count(stealing, stealing+nthreads, true) == nthreads ) {
+                    // We are finished.
+                    finished[get_thread_num()] = true;
+                    in_finished = true;
+                } else {
+                    finished[get_thread_num()] = false;
+                    in_finished = false;
+                }
             }
 
             if ( in_finished ) {
@@ -284,7 +288,16 @@ public :
 
     }
 
+    int tasks_inside() {
+        int retval = 0;
 
+        for ( int i = 0; i < nthreads; ++i  ) {
+            retval += queues[i].size();
+        }
+
+        return retval;
+
+    }
 };
 
 #endif // TASKSTEALING_H

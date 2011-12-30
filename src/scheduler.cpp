@@ -302,8 +302,7 @@ void ExecutionUnit::after_code() {
     }
 
     // If we are simply under the limit :
-    if ( Scheduler::prep_task_count <= Scheduler::lower_bound_for_work
-          ) {
+    if ( Scheduler::prep_task_count <= Scheduler::lower_bound_for_work ) {
 
         bool waiter = false;
         bool *wp = &waiter;
@@ -508,5 +507,7 @@ int Scheduler::get_refund( int amount ) {
 
 
 void Scheduler::start ( frame_struct*(*tgen)()) {
+    prep_task_count = 1;
+    omp_task_count = 1;
     ts.start(tgen);
 }
