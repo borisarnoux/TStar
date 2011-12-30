@@ -80,50 +80,32 @@ void tstar_teardown(int code) {
 }
 
 
-typedef THANDLE( _input(), _output() ) dummy_task;
 
+typedef THANDLE(_input(),_output()) dummy_task;
 
-int tstar_main( struct frame_struct* first_task) {
+static dummy_task *dummy_task_factory() {
+
+    return  TASK( 1, dummy_task, _code(
+                                 DEBUG( "Program start on node %d", get_node_num());
+                                 ) );
+}
+
+// We pass a factory method to this one because
+// memory allocation on the global system is not
+// possible before it is initialized.
+// TODO : think about a way to get past this : )
+int tstar_main( struct frame_struct* (*taskinit)()) {
     if ( !initialized ) {
         FATAL( "Initialization required : tstar_setup");
 
     }
 
-
-
-
-
     if ( get_node_num() == 0 ) {
-
-
-#pragma omp parallel
-{
-            sched->tls_init();
-#pragma omp single
-            {
-                DEBUG( "Launching main task on node : %d ", get_node_num());
-                sched->schedule_global( first_task);
-
-            } // END omp single
-} // END omp parallel
+             DEBUG( "Launching main task on node : %d ", get_node_num());
+             sched->start( taskinit );
     } else {
-
-#pragma omp parallel
-{
-         sched->tls_init();
-
-#pragma omp single
-{
-             // Create a dummy task :
-              dummy_task * dt = TASK( 1, dummy_task, _code(
-                                          DEBUG( "Program start on node %d", get_node_num());
-                                          ) );
-             sched->schedule_global( (struct frame_struct*)dt);
-
-
-} // END omp single
-
-} // END omp parallel
+             // Initialize with the dummy task factory.
+             sched->start( (task_factory) dummy_task_factory );
     }
 
 

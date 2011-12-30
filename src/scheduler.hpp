@@ -12,6 +12,7 @@
 #include <invalidation.hpp>
 #include <delegator.hpp>
 #include <network.hpp>
+#include <taskstealing.h>
 #include <memory>
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
@@ -66,9 +67,9 @@ public:
 
     struct frame_struct * current_cfp;
 
-    static __thread ExecutionUnit * local_execution_unit;
-
+    static __thread ExecutionUnit *local_execution_unit;
     void executor( struct frame_struct * page );
+    static void executor_static( struct frame_struct * page );
     void tdec( struct frame_struct * page, void * ref );
     void register_write( void * object, void * frame, size_t offset, void * buffer, size_t len );
     void process_commits();
@@ -80,8 +81,9 @@ public:
 
 class Scheduler {
     friend class ExecutionUnit;
+    TaskScheduler ts;
+
     int global_local_threshold;
-    static __thread bool initialized;
     NetworkInterface &ni;
     std::list<struct frame_struct *> external_tasks;
 
@@ -98,27 +100,14 @@ public :
     static Scheduler * global_scheduler;
 
     Scheduler(NetworkInterface &_ni) :
+        ts(get_num_threads(), ExecutionUnit::executor_static),
         global_local_threshold(GLOBAL_LOCAL_THRESHOLD),
         ni(_ni) {
         CFATAL( global_scheduler != NULL, "Cannot run two schedulers.");
         global_scheduler = this;
     }
 
-    void tls_init() {
-        if ( ExecutionUnit::local_execution_unit == NULL )  {
-            ExecutionUnit::local_execution_unit = new ExecutionUnit(ni);
 
-        }
-        initialized = true;
-    }
-
-    // -- Towards less reliance on OMP...
-    void spawn_theads( int n );
-
-    void thread_mainloop();
-
-    void schedule_task();
-    // -- End Towards.
 
     // This is the entry point, should be attained when SC reaches 0.
     void schedule_global( struct frame_struct * page );
@@ -143,6 +132,8 @@ public :
     int steal_tasks( struct frame_struct ** buffer, int amount );
 
     int get_refund( int amount );
+    // Start with a factory to build the first task.
+    void start ( frame_struct*(*tgen)());
 
 };
 

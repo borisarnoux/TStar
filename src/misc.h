@@ -18,8 +18,8 @@ extern "C" {
 
 
 // Some config ( comment if necessary )
-#define MUTE // Sets all debug messages off.
-//#define DEBUG_ADDITIONAL_CODE 1 // Additional checks ( slow )
+//#define MUTE // Sets all debug messages off.
+#define DEBUG_ADDITIONAL_CODE 1 // Additional checks ( slow )
 
 extern __thread int current_color;
 void set_current_color( int color );

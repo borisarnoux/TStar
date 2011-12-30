@@ -160,6 +160,8 @@ int mapper_thread_who_owns( void * ptr ) {
 }
 
 void * mapper_malloc(size_t len) {
+    CFATAL( get_thread_num() < 0 || get_thread_num() >= get_num_threads(),
+            "Invalid thread num.");
     void * retval = NULL;
 
 #if DEBUG_ADDITIONAL_CODE

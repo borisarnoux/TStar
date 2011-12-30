@@ -46,26 +46,27 @@ static inline int get_num_nodes() {
 }
 
 
+extern __thread int thread_id;
 inline int get_thread_num() {
+    return thread_id;
 
-    return omp_get_thread_num();
-
+}
+inline void set_thread_num( int id) {
+    thread_id = id;
 }
 
 
-static int _threads_tmp = -1;
+extern int _num_threads;
+static const int default_num_threads = 2;
 inline int get_num_threads() {
 
-    // TODO : work on this...
-    // Because this function is used outside omp parallel blocks,
-    // we need to give the right result... ( 2 here ).
-    if ( _threads_tmp == -1  ) {
-        char * fromomp = getenv("OMP_NUM_THREADS");
+    if ( _num_threads == -1  ) {
+        char * fromomp = getenv("TSTAR_NUM_THREADS");
 
-        _threads_tmp = fromomp==NULL?2:atoi(fromomp);
-        CFATAL( _threads_tmp != 2, " Probably something wrong with OMP NUM THREADS ( != 2 here )");
+        _num_threads = fromomp==NULL?2:atoi(fromomp);
+        CFATAL( _num_threads != 2, " Probably something wrong with OMP NUM THREADS ( != 2 here )");
     }
-    return _threads_tmp;
+    return _num_threads;
 }
 
 #ifdef __cplusplus

@@ -102,16 +102,21 @@ fibclient_task * fibclient(int n) {
 }
 
 
+int arg = 11;
+struct frame_struct * factory0() {
+    return (frame_struct*)fibclient(arg);
+}
+
 int tstar_main_test6(int argc, char ** argv, struct frame_struct* first_task) {
 
     tstar_setup(argc, argv);
     if ( get_node_num() == 0) {
-
         int fibval = atoi( argv[argc-1]);
-        fibclient_task * fib0 = fibclient(fibval==0?10:fibval);
+        fibval = fibval==0?10:fibval;
+        arg = fibval;
 
 
-        tstar_main((struct frame_struct *) fib0 );
+        tstar_main(factory0);
     } else {
         tstar_main(NULL);
     }

@@ -26,18 +26,32 @@ int Scheduler::processing_messages_lock;
 typedef std::multimap<PageType, PageType> TDecMap;
 typedef std::list<struct frame_struct*> CreatedFramesList;
 
+__thread ExecutionUnit* ExecutionUnit::local_execution_unit = NULL;
+
+
+
+void ExecutionUnit::executor_static( struct frame_struct * page ) {
+    if ( local_execution_unit == NULL ) {
+        local_execution_unit = new ExecutionUnit(*NetworkInterface::global_network_interface);
+    }
+    local_execution_unit->executor(page);
+}
+
 void ExecutionUnit::executor( struct frame_struct * page ) {
-    local_execution_unit->current_cfp = page;
+    current_cfp = page;
     if ( ! PAGE_IS_AVAILABLE( page ) ) {
         // This, while not being strictly speaking a mistake, shouldn't happen.
+        // It doesn't go against the rules of the memory model
+        // ( you can indeed make use of invalid data )
+        // But Dataflow isn't supposed to invalid any page at this
+        // point.
         FATAL( "Execution of invalid page" );
     }
-    DEBUG( "%p %p %p", local_execution_unit, local_execution_unit, page );
-    local_execution_unit->before_code();
+    before_code();
 
     DEBUG( "Executing function for task : %p, at %p ", page, page->static_data->fn);
     page->static_data->fn();
-    local_execution_unit->after_code();
+    after_code();
 
 
 }
@@ -237,7 +251,7 @@ void ExecutionUnit::after_code() {
     // Process commits.
     // and/or free zones written.
     // Process fat pointers refecence counters.
-    local_execution_unit->process_commits();
+    process_commits();
 
     // We can adjust task count.
     __sync_sub_and_fetch( &Scheduler::prep_task_count, 1);
@@ -325,14 +339,11 @@ void ExecutionUnit::after_code() {
 }
 
 
-__thread ExecutionUnit * ExecutionUnit::local_execution_unit = NULL;
-__thread bool Scheduler::initialized = false;
 Scheduler * Scheduler::global_scheduler = NULL;
 
 
 // This is the entry point, should be attained when SC reaches 0.
 void Scheduler::schedule_global( struct frame_struct * page )  {
-    CFATAL( ! initialized, "Uninitialized TLS");
     if ( prep_task_count > global_local_threshold ) {
         DELEGATE( Delegator::default_delegator, this->schedule_external( page ););
     } else {
@@ -341,7 +352,7 @@ void Scheduler::schedule_global( struct frame_struct * page )  {
     }
 }
 
-// This function adds the task to an external queue.
+// This method adds the task to an external queue.
 // This queue can be eventually published or returned for local execution.
 void Scheduler::schedule_external( struct frame_struct * page ) {
     delegator_only();
@@ -432,10 +443,16 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
 void Scheduler::schedule_inner( struct frame_struct * page ) {
     __sync_add_and_fetch( &omp_task_count, 1 );
 
-#pragma omp task
-    {
-    ExecutionUnit::local_execution_unit->executor( page );
-    }
+
+    // Comments show the equivalence with the OMP way.
+//#pragma omp task
+//    {
+
+    //ExecutionUnit::local_execution_unit->executor( page );
+
+
+    ts.schedule(page);
+//    }
 }
 
 
@@ -490,3 +507,6 @@ int Scheduler::get_refund( int amount ) {
 
 
 
+void Scheduler::start ( frame_struct*(*tgen)()) {
+    ts.start(tgen);
+}
