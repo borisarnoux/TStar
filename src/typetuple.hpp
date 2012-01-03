@@ -19,6 +19,7 @@ struct rw_frame;
 
 struct layout_type_to_data {
   static int get_dyn_type( struct fat_pointer_buffer * n ) {
+        FATAL( "Illegal obsolete type FATP_TYPE.");
         return FATP_TYPE;
   }
 

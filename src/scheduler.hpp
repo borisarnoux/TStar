@@ -6,7 +6,6 @@
 #include <list>
 #include <map>
 #include <scheduler.hpp>
-#include <fat_pointers.hpp>
 #include <identifiers.h>
 #include <data_events.hpp>
 #include <invalidation.hpp>
@@ -115,9 +114,6 @@ public :
     // This function adds the task to an external queue.
     // This queue can be eventually published or returned for local execution.
     void schedule_external( struct frame_struct * page );
-
-
-    void get_ressources_rec( fat_pointer_p fat, Closure * c );
 
     // This function won't keep track of the task, will instead spawn local tasks to handle the ressources it needs (and thus hide latency)
     void prepare_ressources( struct frame_struct * page );

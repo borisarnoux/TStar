@@ -268,8 +268,12 @@ void NetworkInterface::onDataReqMessage( MessageHdr &m ) {
         DEBUG( " NETWORK -- DataReqMessage Received : page %p from %d (sizeofpage=%d)", drm.page, drm.orig, (int)fheader->size );
 
         // Build an answer.
+        // We need a stack allocated array of sufficient size
+        // for the variable size struct.
         char _tab[sizeof(DataMessage) +fheader->size];
-        DataMessage & resp = *((DataMessage*) &_tab);
+        // Placement new to beat strict aliasing rule
+        // that would affect the type punning here.
+        DataMessage & resp = *new(_tab) DataMessage;
         resp.size = fheader->size;
         resp.page = drm.page;
 
@@ -438,7 +442,9 @@ void  NetworkInterface::doRespTransfer(PageType page,  node_id_t target ) {
         // Transfers the responsibility :
         fheader->next_resp = target;
         char _tab[sizeof(RespTransfer)+fheader->size];
-        RespTransfer & resp_transfer = *( RespTransfer * ) &_tab;
+        // We use placement new on this stack allocated array
+        // to avoid breaking strict aliasing rules.
+        RespTransfer & resp_transfer = *new(_tab) RespTransfer;
         resp_transfer.datamsg.size = fheader->size;
         resp_transfer.shared_nodes_bitmap = export_and_clear_shared_set(page);
         // Because we consider ourselves as valid, bitmap contains local node :
@@ -765,8 +771,12 @@ void NetworkInterface::send_rwrite( node_id_t target,
                                     size_t offset,
                                     void * buffer,
                                     size_t len) {
+
+    // Here we use a stack allocated array as memory buffer
+    // and populate it using placement new rather than type
+    // punning to avoid breaking strict aliasing rules.
     char _tab[sizeof(RWrite)+ len];
-    RWrite &rw = *(RWrite*) &_tab;
+    RWrite &rw = *new(_tab) RWrite;
     memcpy( rw.data, (char*)buffer, len );
     rw.offset = offset;
     rw.orig = get_node_num();

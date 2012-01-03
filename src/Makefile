@@ -1,6 +1,10 @@
 
 
 
+
+
+
+
 SOURCES_CPP=$(wildcard *.cpp)
 SOURCES_C=$(wildcard *.c)
 
@@ -16,10 +20,10 @@ exec : $(O_FILES)
 	mpic++  $(MAKEOPTS) -g -fopenmp -o $@ $^
 
 %.o : %.cpp
-	mpic++ -c $(MAKEOPTS) -o $@ $^ -std=c++0x -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused 
+	mpic++ -c $(MAKEOPTS) -o $@ $^ -std=c++0x -O2 -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused 
 
 %.o : %.c 
-	gcc -c -o $(MAKEOPTS) $@ $^ -std=gnu99 -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused
+	gcc -c -o $(MAKEOPTS) $@ $^ -std=gnu99 -O2 -Wall -Wextra -Werror -fopenmp -g -I. -Wno-unused
 
 
 clean :

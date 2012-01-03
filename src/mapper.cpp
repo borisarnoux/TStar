@@ -1,6 +1,8 @@
 //#define _GNU_SOURCE
 
 #include <boost/interprocess/managed_external_buffer.hpp>
+#include <boost/thread/recursive_mutex.hpp>
+#include <boost/thread/locks.hpp>
 
 #include <node.h>
 
@@ -15,34 +17,51 @@
 
 #include "mapper.h"
 
+
+/* This simple C based file implements the global address space with mmap calls.
+   It also provides per thread memory allocation facilities (privatized).
+   It initializes once the number of threads and nodes are known.
+
+   It uses boost managed external buffer to implement the heap, as well as
+    MPSC queues for allowing "free" requests to get to the right client. */
+
+
+
+
 #define PAGE_LEN 4096
 
 #if DEBUG_ADDITIONAL_CODE
-std::set<void*> valid_pages_set;
 
+/* This is used to detect valid pointers in case of memory corruption */
+/* Use add, rm and check */
+std::set<void*> valid_pages_set;
+typedef boost::recursive_mutex RecMutex;
+typedef boost::lock_guard<RecMutex> ScopedLock;
+
+RecMutex checker_mutex;
 void mapper_valid_address_add( void * ptr ) {
-#pragma omp critical (valcheck)
-    {
+    ScopedLock sl(checker_mutex);
+
     valid_pages_set.insert(ptr);
-    }
+
 }
 void mapper_valid_address_check( void * ptr ) {
-#pragma omp critical (valcheck)
-    {
+    ScopedLock sl(checker_mutex);
+
     if ( valid_pages_set.find(ptr) == valid_pages_set.end() ) {
         current_color = 33;
         DEBUG( "WARNING ! Pointer %p was not in valid set.", ptr);
         current_color = 0;
-    }
+
     }
 }
 void mapper_valid_address_rm( void * ptr)  {
+    ScopedLock sl(checker_mutex);
 
     mapper_valid_address_check(ptr);
-#pragma omp critical (valcheck)
-    {
+
     valid_pages_set.erase(ptr);
-}
+
 
 }
 

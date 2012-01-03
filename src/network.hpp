@@ -6,6 +6,31 @@
 #include <identifiers.h>
 #include <delegator.hpp>
 
+
+/* For the sake of simplicity, the messages defined here are created in a simple factory
+  class NetworkInterface, and transmitted by a low level component, lowlevelfactory.
+  All the messages hold specific payload, therefore, there is little need for a more
+  abstracted message, except in the case of RPC requests.
+  RPC requests are essentially the encapsulation of a lambda into a template (what we call
+  here a closure) and these lambda carry the parameters of the handler to be executed on the
+  receiver. The handler itself is located with late binding. Of course this requires that the
+  same exact code runs on all machines, with the same address space.
+
+   The address space limitaiton is usually violated because of the presence of dynamic libraries,
+   however in most situations, those are accessed with an additional indirection (the Global Offset Table).
+   Examples of things which wouldn't work would include computing pointers to values in dynlibs and
+   attempting to transfer them (but this is silly). Anyway, this mechanism is provided as is.
+
+   Adding another message to this interface is easy :
+     1- Provide a POD (plain old data) struct, here or more appropriately in network.cpp.
+     2- Add a type to the MessageType enum. This is the type identifier for the factory,
+        and it needs to keep the proper naming convention.
+     3- Add a BIND_MT line to bind a handler to a messagetype.
+     4- Add a sender and a handler methods, following the right convention. ( see other messages for examples ).
+
+ */
+
+
 // Routable messages have orig and are forwarded.
 enum MessageTypes {
 

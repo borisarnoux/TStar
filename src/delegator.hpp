@@ -15,7 +15,9 @@
 extern __thread int  delegator_flag;
 
 static inline void delegator_only() {
+#if DEBUG_ADDITIONAL_CODE
   CFATAL( delegator_flag == 0, "Delegator only function called outside delegator");
+#endif
 }
 
 
@@ -40,24 +42,19 @@ protected:
 };
 
 template<typename T> 
-Closure * new_Closure( int _sc, T * _lambda ) {
-  if ( _sc == 0 ) {
-    //FATAL( "FATAL : Closure must be delayed, use call instead." );
-  }
-
+Closure * new_Closure( int _sc, T _lambda ) {
   struct LocalClosure : Closure {
-	T* lambda;
+        T lambda;
 	
 
 
-	LocalClosure( int _sc, T* _lambda) :
+        LocalClosure( int _sc, const T& _lambda) :
 		Closure(_sc), lambda(_lambda) {}
 
 	
 
 	virtual void operator() () {
-	  (*lambda)();
-	  delete lambda;
+          lambda();
 	  delete this;
 	}
   };
@@ -66,8 +63,8 @@ Closure * new_Closure( int _sc, T * _lambda ) {
 
 }
 
-#define new_Closure( counter, block ) new_Closure( counter,  new auto([=]() {block} ))
-#define new_Closure_R( counter, block ) new_Closure( counter,  new auto([&]() {block} ))
+#define new_Closure( counter, block ) new_Closure( counter,  [=]() {block} )
+#define new_Closure_R( counter, block ) new_Closure( counter,  [&]() {block} )
 
 #define DELEGATE( delegator, block ) (delegator).delegate( new_Closure( 1, block ) )
 #define DELEGATE_R( delegator, block ) (delegator).delegate( new_Closure_R( 1, block ) )

@@ -4,7 +4,6 @@
 #include <list>
 #include <map>
 #include <scheduler.hpp>
-#include <fat_pointers.hpp>
 #include <identifiers.h>
 #include <data_events.hpp>
 #include <invalidation.hpp>
@@ -75,7 +74,6 @@ void ExecutionUnit::register_write( void * object, void * frame, size_t offset, 
 void ExecutionUnit::process_commits() {
     // For each registered ressource
 
-    ressource_desc d;
     int nargs = current_cfp->static_data->nargs;
 
     DEBUG( "ExecutionUnit : Processing Commits -- Task : %p, nargs = %d", current_cfp, nargs);
@@ -128,7 +126,8 @@ void ExecutionUnit::process_commits() {
             // Commits the tdecs immediately after invalidation :
 
             if ( current_type == FATP_TYPE ) {
-                ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
+               // ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
+                FATAL( "Obsolete type FATP_TYPE");
             } else if ( current_type == W_FRAME_TYPE ||
                 current_type == RW_FRAME_TYPE ) {
                 DELEGATE( Delegator::default_delegator,
@@ -153,8 +152,7 @@ void ExecutionUnit::process_commits() {
 
         Closure *  on_write_commits = new_Closure ( frame_dwrites.size(),
               if ( current_type == FATP_TYPE ) {
-                  // TODO : certainly delegate this.
-                  ask_or_do_invalidation_rec_then( (fat_pointer_p)current_value, dotdecs );
+                  FATAL( "Unsupported deprecated FATP_TYPE");
               } else if ( current_type == W_FRAME_TYPE ||
                   current_type == RW_FRAME_TYPE ) {
                     DELEGATE(
@@ -211,7 +209,7 @@ bool ExecutionUnit::check_ressources() {
             CFATAL( ! PAGE_IS_TRANSIENT( current_cfp->args[i]), "WONLY frame didn't reserve frame for WONLY.");
             break;
         case FATP_TYPE:
-            FATAL( "TODO");
+            FATAL( "Obsolete type FATP_TYPE");
             break;
 
 
@@ -388,11 +386,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
             if ( !PAGE_IS_RESP(page->args[i]) ) {
                 work_count += 1;
             }
-        } else if ( page->static_data->arg_types[i] == FATP_TYPE ) {
-            work_count += 1;
         }
-
-
 
     }
 
@@ -426,11 +420,6 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
             }
         }
 
-        if (   page->static_data->arg_types[i] == FATP_TYPE ) {
-
-            acquire_rec((fat_pointer_p) page->args[i], gotoinnersched );
-            recount_work += 1;
-        }
     }
 
     CFATAL( recount_work != work_count, "Memory frame state modified during prepare_ressources.");
@@ -442,16 +431,8 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
 void Scheduler::schedule_inner( struct frame_struct * page ) {
     __sync_add_and_fetch( &omp_task_count, 1 );
 
-
-    // Comments show the equivalence with the OMP way.
-//#pragma omp task
-//    {
-
-    //ExecutionUnit::local_execution_unit->executor( page );
-
-
     ts.schedule(page);
-//    }
+
 }
 
 

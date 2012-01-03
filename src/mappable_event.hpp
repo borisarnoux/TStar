@@ -2,7 +2,7 @@
 #define TASK_MAPPER_H
 
 
-#include  <boost/thread/recursive_mutex.hpp>
+#include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/locks.hpp>
 #include <vector>
 #include <map>
@@ -12,7 +12,10 @@
 #include <frame.hpp>
 #include <delegator.hpp>
 
-
+/* This task mapper class is a simple wrapper around map, it aims at :
+    - Lowering the lock contention by hashing values into different maps.
+    - Implementing the policy of event triggering based on keyed external events
+    (page arrival, etc.) */
 
 
 
@@ -67,6 +70,7 @@ public:
 
    }
 
+
    void signal_evt( KeyType k ) {
       int idx = hashzone(&k,sizeof(k))%mapsn;
 
@@ -81,15 +85,13 @@ public:
       for ( auto i = all_occurences.first;
             i != all_occurences.second;
             ++ i ) {
-          // Calls Tdec ( auto cleanup )
+          // Calls Tdec
           i->second->tdec();
           
       }
       // Entries cleanup.
       maps[idx].erase( all_occurences.first, all_occurences.second );
       busy = 0;
-
-
    }
 
    virtual ~TaskMapper( ) {

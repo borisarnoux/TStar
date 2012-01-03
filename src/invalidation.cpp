@@ -1,4 +1,3 @@
-#include <fat_pointers.hpp>
 #include <network.hpp>
 
 #include <hash_int.h>
@@ -101,67 +100,6 @@ void shared_set_load_bit_map( void * page,long long bitmap ) {
 }
 
 
-
-
-
-
-
-
-
-void ask_or_do_invalidation_rec_then( fat_pointer_p p, Closure * c ) {
-#if DEBUG_ADDITIONAL_CODE
-  delegator_only();
-#endif
-  // Because p is a fat pointer,
-  // it is supposed to stay valid until this point.
-  CFATAL( !PAGE_IS_AVAILABLE(p), "Illegal invalid fat pointer.");
-
-
-  // Replace this model with one actually taking care of the writes
-  // To determine whether invalidation is necessary or not.
-  int count_todo = 0;
-  for ( int i = 0; i < p->use_count; ++ i  ) {
-        struct ressource_desc & r = p->elements[i];
-        if ( r.perms == W_FRAME_TYPE  || r.perms == RW_FRAME_TYPE ) {
-            // RW means we need to check for RESP acquired (or this is a bug )
-            CFATAL ( r.perms == RW_FRAME_TYPE && !PAGE_IS_RESP( r.page ),
-                     "Page requires RW perm, but RESP was not granted. FATAL " );
-            count_todo +=1;
-
-        } else if ( r.perms == FATP_TYPE ) {
-            // Recurse, we need to count it :
-            count_todo +=1;
-        } else if ( r.perms == R_FRAME_TYPE ) {
-            // Nothing to do.
-        } else {
-            FATAL( "Unknown ressources perm in fat pointer %p ", p);
-        }
-  }
-  // Before doing anything else, we must count operations to be done.
-  Closure * waiter = new_Closure(count_todo,
-   c->tdec();
-  );
-
-
-  // We now link the work with this new task.
-  for ( int i = 0; i < p->use_count; ++ i  ) {
-       struct ressource_desc & r = p->elements[i];
-       if ( r.perms == W_FRAME_TYPE  || r.perms == RW_FRAME_TYPE ) {
-           ask_or_do_invalidation_then(r.page, waiter);
-
-       } else if ( r.perms == FATP_TYPE ) {
-           ask_or_do_invalidation_rec_then((fat_pointer_p)r.page, waiter);
-
-       } else if ( r.perms == R_FRAME_TYPE ) {
-           // Nothing to do.
-
-       } else {
-           FATAL( "Unknown ressources perm in fat pointer %p ", p);
-       }
-  }
-
-
-}
 
 
 void ask_or_do_invalidation_then(  void * page, Closure * c ) {

@@ -2,7 +2,6 @@
 #define DFRT_MISC_H
 
 
-#include <config.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -18,6 +17,8 @@ extern "C" {
 
 
 // Some config ( comment if necessary )
+#define VERBOSE
+#define VERY_VERBOSE
 #define MUTE // Sets all debug messages off.
 //#define DEBUG_ADDITIONAL_CODE 1 // Additional checks ( slow )
 
