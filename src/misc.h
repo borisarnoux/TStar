@@ -21,6 +21,7 @@ extern "C" {
 #define VERY_VERBOSE
 #define MUTE // Sets all debug messages off.
 //#define DEBUG_ADDITIONAL_CODE 1 // Additional checks ( slow )
+#define CACHE_LINE_SIZE 64
 
 extern __thread int current_color;
 void set_current_color( int color );

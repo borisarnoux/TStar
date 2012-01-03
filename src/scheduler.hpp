@@ -13,6 +13,7 @@
 #include <network.hpp>
 #include <taskstealing.h>
 #include <memory>
+#include <globalcounter.h>
 /* This  scheduler class  keeps track of the tasks when it is needed */
 
 #define GLOBAL_LOCAL_THRESHOLD 20
@@ -88,8 +89,8 @@ class Scheduler {
 
     static const int lower_bound_for_work = 10;
 
-    static int prep_task_count;
-    static int omp_task_count;
+    GlobalCounter<get_thread_num> prep_task_count;
+    GlobalCounter<get_thread_num> omp_task_count;
 
 public :
     static int busy_processing_messages;
@@ -101,7 +102,10 @@ public :
     Scheduler(NetworkInterface &_ni) :
         ts(get_num_threads(), ExecutionUnit::executor_static),
         global_local_threshold(GLOBAL_LOCAL_THRESHOLD),
-        ni(_ni) {
+        ni(_ni),
+        prep_task_count(get_num_threads()),
+        omp_task_count(get_num_threads())
+    {
         CFATAL( global_scheduler != NULL, "Cannot run two schedulers.");
         global_scheduler = this;
     }

@@ -16,8 +16,6 @@
 
 
 
-int Scheduler::prep_task_count = 0;
-int Scheduler::omp_task_count = 0;
 int Scheduler::busy_processing_messages;
 int Scheduler::processing_messages_lock;
 
@@ -252,9 +250,8 @@ void ExecutionUnit::after_code() {
     process_commits();
 
     // We can adjust task count.
-    __sync_sub_and_fetch( &Scheduler::prep_task_count, 1);
-    __sync_sub_and_fetch( &Scheduler::omp_task_count, 1);
-
+    Scheduler::global_scheduler->prep_task_count.decr();
+    Scheduler::global_scheduler->omp_task_count.decr();
     // Then we free the memory.
     owm_free(tstar_getcfp());
 
@@ -271,8 +268,7 @@ void ExecutionUnit::after_code() {
     }
 
 
-    // Then consider what might left to do :
-    while ( Scheduler::prep_task_count == 0 ) {
+    while ( Scheduler::global_scheduler->prep_task_count.get_value() == 0 ) {
         // We are likely the only ones here, but we need to make sure no tasks are
         // waiting in the external queue for some reason, and need to use a delegator
         // for that (probably synchronously, unimportant if async )
@@ -300,7 +296,8 @@ void ExecutionUnit::after_code() {
     }
 
     // If we are simply under the limit :
-    if ( Scheduler::prep_task_count <= Scheduler::lower_bound_for_work ) {
+    if ( Scheduler::global_scheduler->prep_task_count.get_value()
+            <= Scheduler::lower_bound_for_work ) {
 
         bool waiter = false;
         bool *wp = &waiter;
@@ -318,10 +315,11 @@ void ExecutionUnit::after_code() {
     }
 
     // To process messages of tasks in prep :
-    while (  Scheduler::omp_task_count == 0 ) {
+    while (  Scheduler::global_scheduler->omp_task_count.get_value() == 0 ) {
 
 
-        while ( Scheduler::omp_task_count == 0 && Scheduler::busy_processing_messages );
+        while ( Scheduler::global_scheduler->omp_task_count.get_value() == 0
+                && Scheduler::busy_processing_messages );
 
         if ( __sync_bool_compare_and_swap(&Scheduler::processing_messages_lock, 0, 1)) {
              Scheduler::busy_processing_messages = 1;
@@ -341,10 +339,10 @@ Scheduler * Scheduler::global_scheduler = NULL;
 
 // This is the entry point, should be attained when SC reaches 0.
 void Scheduler::schedule_global( struct frame_struct * page )  {
-    if ( prep_task_count > global_local_threshold ) {
+    if ( prep_task_count.get_value() > global_local_threshold ) {
         DELEGATE( Delegator::default_delegator, this->schedule_external( page ););
     } else {
-        __sync_add_and_fetch( &prep_task_count, 1 );
+        prep_task_count.incr();
         DELEGATE( Delegator::default_delegator, this->prepare_ressources( page ); );
     }
 }
@@ -429,7 +427,7 @@ void Scheduler::prepare_ressources( struct frame_struct * page ) {
 
 // This yields to the inner scheduler.
 void Scheduler::schedule_inner( struct frame_struct * page ) {
-    __sync_add_and_fetch( &omp_task_count, 1 );
+    omp_task_count.incr();
 
     ts.schedule(page);
 
@@ -478,7 +476,7 @@ int Scheduler::get_refund( int amount ) {
         }
 
         // This will eventually get the tasks to execute.
-        prepare_ressources( external_tasks.front() ) ;
+        prepare_ressources( external_tasks.front() );
         external_tasks.pop_front();
     }
 
@@ -488,7 +486,7 @@ int Scheduler::get_refund( int amount ) {
 
 
 void Scheduler::start ( frame_struct*(*tgen)()) {
-    prep_task_count = 1;
-    omp_task_count = 1;
+    prep_task_count.set(1);
+    omp_task_count.set(1);
     ts.start(tgen);
 }
